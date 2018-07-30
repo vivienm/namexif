@@ -1,0 +1,28 @@
+stages:
+- test
+
+image: python:3.7
+
+before_script:
+- pip install tox
+
+flake8:
+  script: tox -e flake8
+
+isort:
+  script: tox -e isort
+
+pydocstyle:
+  script: tox -e pydocstyle
+
+black:
+  script: tox -e black
+
+manifest:
+  script: tox -e manifest
+
+metadata:
+  script: tox -e metadata
+
+doc8:
+  script: tox -e doc8

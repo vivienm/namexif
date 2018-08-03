@@ -1,0 +1,22 @@
+image: registry.maisonneuve.io/vivien/docker-ci-rust:latest
+
+stages:
+- lint
+- test
+
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+
+lint:
+  stage: lint
+  script:
+  - cargo fmt -- --write-mode=diff
+
+test:
+  stage: test
+  script:
+  - cargo check --verbose
+  cache:
+    paths:
+    - .cargo/
+    - target/

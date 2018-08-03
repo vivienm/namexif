@@ -1,3 +1,0 @@
-include .flake8 .pydocstyle
-include *.cfg *.in *.ini .*rc *.rst *.txt *.yml
-recursive-include tests *.py

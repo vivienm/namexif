@@ -10,7 +10,7 @@ variables:
 lint:
   stage: lint
   script:
-  - cargo fmt -- --write-mode=diff
+  - cargo fmt -- --check
 
 test:
   stage: test

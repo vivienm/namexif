@@ -7,11 +7,11 @@ use std::fs;
 use clap::Shell;
 
 #[allow(dead_code)]
-#[path = "src/cli.rs"]
-mod cli;
+#[path = "src/app.rs"]
+mod app;
 
 fn main() {
-    let mut app = cli::build_cli();
+    let mut app = app::build_app();
     let output_dir = env::var_os("OUT_DIR").unwrap();
     fs::create_dir_all(&output_dir).unwrap();
     app.gen_completions("namexif", Shell::Bash, &output_dir);

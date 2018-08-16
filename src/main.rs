@@ -12,6 +12,7 @@ mod app;
 mod image;
 mod rename;
 mod settings;
+mod utils;
 
 use std::path::Path;
 use std::process::exit;

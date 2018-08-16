@@ -2,7 +2,6 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{Local, NaiveDateTime, TimeZone};
@@ -11,6 +10,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use image::ImageFile;
 use settings::Settings;
+use utils::prompt_confirm;
 
 pub struct RenameItem {
     pub source_path: PathBuf,
@@ -59,7 +59,7 @@ impl<'a> Renamer<'a> {
     const TIFF_EXTENSIONS: [&'static str; 4] = [Self::TIFF_EXTENSION, "tif", "TIF", "TIFF"];
 
     pub fn new(settings: &'a Settings<'a>) -> Self {
-        Renamer {settings}
+        Renamer { settings }
     }
 
     fn get_target_extension(&self, source_path: &Path) -> Result<&str, RenameSkip> {
@@ -124,7 +124,7 @@ impl<'a> Renamer<'a> {
 
     fn log_rename_skip(&self, rename_error: &RenameSkip, source_path: &Path) {
         let (log_level, reason) = match rename_error {
-            RenameSkip::Extension => (log::Level::Info, "invalid extension"),
+            RenameSkip::Extension => (log::Level::Info, "not an EXIF file"),
             RenameSkip::Directory => (log::Level::Info, "is a directory"),
             RenameSkip::CantGetDate => (log::Level::Warn, "can't determine date"),
             RenameSkip::WellNamed => (log::Level::Debug, "already well named"),
@@ -205,31 +205,6 @@ impl<'a> Renamer<'a> {
         result
     }
 
-    pub fn confirm(&self) -> bool {
-        if self.settings.assume_yes {
-            return true;
-        };
-        let stdin = io::stdin();
-        let mut stdout = io::stdout();
-        let mut input = String::new();
-        loop {
-            print!("OK? [yN] ");
-            stdout.flush().unwrap();
-            stdin.read_line(&mut input).unwrap();
-            {
-                let input = input.trim_right();
-                if input == "y" || input == "Y" {
-                    return true;
-                } else if input == "n" || input == "N" || input == "" {
-                    return false;
-                } else {
-                    println!("Invalid input: {:?}", input);
-                }
-            }
-            input.clear();
-        }
-    }
-
     pub fn run(&self, source_dir: &Path) -> i32 {
         let renames = match self.get_renames(source_dir) {
             Some(renames) => renames,
@@ -238,13 +213,16 @@ impl<'a> Renamer<'a> {
             }
         };
         if renames.is_empty() {
-            println!("Nothing to do");
+            info!("Nothing to do");
             return 0;
         };
         for rename in &renames {
             println!("{}", rename);
         }
-        if !self.settings.dry_run && self.confirm() && !self.apply_renames(&renames) {
+        if !self.settings.dry_run
+            && (self.settings.assume_yes || prompt_confirm())
+            && !self.apply_renames(&renames)
+        {
             return 2;
         };
         0

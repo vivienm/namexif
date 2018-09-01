@@ -79,7 +79,7 @@ impl<'a> Renamer<'a> {
     fn get_target_file_stem<T>(
         &self,
         naive_datetime: &NaiveDateTime,
-        timezone: T,
+        timezone: &T,
     ) -> Result<String, RenameSkip>
     where
         T: TimeZone,
@@ -98,8 +98,8 @@ impl<'a> Renamer<'a> {
             .and_then(|imgfile| imgfile.get_datetime())
             .map_err(|_| RenameSkip::CantGetDate)?;
         let mut target_name = match self.settings.timezone {
-            None => self.get_target_file_stem(&naive_datetime, Local),
-            Some(timezone) => self.get_target_file_stem(&naive_datetime, timezone),
+            None => self.get_target_file_stem(&naive_datetime, &Local),
+            Some(timezone) => self.get_target_file_stem(&naive_datetime, &timezone),
         }?;
         target_name.push_str(".");
         target_name.push_str(target_extension);
@@ -167,7 +167,7 @@ impl<'a> Renamer<'a> {
                 Ok(direntry) => Some(direntry),
                 Err(err) => {
                     warn!("Skipping file: {}", err);
-                    return None;
+                    None
                 }
             })
             .collect();

@@ -33,7 +33,7 @@ impl ImageFile {
     fn get_raw_field(&self, tag: exif::Tag) -> Result<&exif::Field, ImageError> {
         self.reader
             .get_field(tag, false)
-            .ok_or(ImageError::ExifMissingField(tag))
+            .ok_or_else(|| ImageError::ExifMissingField(tag))
     }
 
     fn _get_datetime_field(&self, tag: exif::Tag) -> Result<exif::DateTime, ImageError> {

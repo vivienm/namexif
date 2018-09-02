@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
@@ -18,6 +19,7 @@ const JPEG_EXTENSIONS: [&str; 4] = [JPEG_CANONICAL_EXTENSION, "JPG", "jpeg", "JP
 const TIFF_CANONICAL_EXTENSION: &str = "tiff";
 const TIFF_EXTENSIONS: [&str; 4] = [TIFF_CANONICAL_EXTENSION, "tif", "TIF", "TIFF"];
 
+#[derive(Debug)]
 enum RenameError {
     IsADirectory,
     MissingExtension,
@@ -41,6 +43,8 @@ impl fmt::Display for RenameError {
         }
     }
 }
+
+impl Error for RenameError {}
 
 impl RenameError {
     fn log_level(&self) -> log::Level {

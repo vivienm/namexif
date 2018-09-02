@@ -1,4 +1,4 @@
-image: registry.maisonneuve.io/vivien/docker-ci-rust:latest
+image: registry.gitlab.com/vmaison/docker-ci-rust:latest
 
 stages:
 - lint

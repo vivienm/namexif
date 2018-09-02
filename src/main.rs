@@ -18,7 +18,7 @@ use std::path::Path;
 use std::process::exit;
 
 use app::build_app;
-use rename::Renamer;
+use rename::BatchRenamer;
 use settings::Settings;
 
 fn main() {
@@ -28,6 +28,9 @@ fn main() {
 
     simplelog::TermLogger::init(settings.log_level, simplelog::Config::default()).unwrap();
 
-    let renamer = Renamer::new(&settings);
-    exit(renamer.run(source_dir));
+    let renamer = BatchRenamer::new(&settings);
+    match renamer.run(source_dir) {
+        Err(()) => exit(2),
+        Ok(()) => (),
+    }
 }

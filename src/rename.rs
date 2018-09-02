@@ -4,13 +4,139 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use chrono::{Local, NaiveDateTime, TimeZone};
+use chrono::offset::LocalResult;
+use chrono::{Local, TimeZone};
 use log;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use image::ImageFile;
+use image::{ImageError, ImageFile};
 use settings::Settings;
 use utils::prompt_confirm;
+
+const JPEG_CANONICAL_EXTENSION: &str = "jpg";
+const JPEG_EXTENSIONS: [&str; 4] = [JPEG_CANONICAL_EXTENSION, "JPG", "jpeg", "JPEG"];
+const TIFF_CANONICAL_EXTENSION: &str = "tiff";
+const TIFF_EXTENSIONS: [&str; 4] = [TIFF_CANONICAL_EXTENSION, "tif", "TIF", "TIFF"];
+
+enum RenameError {
+    IsADirectory,
+    MissingExtension,
+    InvalidExtension,
+    ImageError(ImageError),
+    InvalidLocalDatetime,
+    AmbiguousLocalDatetime,
+    IdenticalNames,
+}
+
+impl fmt::Display for RenameError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RenameError::IsADirectory => write!(f, "Is a directory"),
+            RenameError::MissingExtension => write!(f, "Missing extension"),
+            RenameError::InvalidExtension => write!(f, "Invalid extension"),
+            RenameError::ImageError(err) => err.fmt(f),
+            RenameError::InvalidLocalDatetime => write!(f, "Invalid local time representation"),
+            RenameError::AmbiguousLocalDatetime => write!(f, "Ambiguous local time representation"),
+            RenameError::IdenticalNames => write!(f, "Already well named"),
+        }
+    }
+}
+
+impl RenameError {
+    fn log_level(&self) -> log::Level {
+        match self {
+            RenameError::IsADirectory => log::Level::Info,
+            RenameError::MissingExtension => log::Level::Info,
+            RenameError::InvalidExtension => log::Level::Info,
+            RenameError::ImageError(..) => log::Level::Error,
+            RenameError::InvalidLocalDatetime => log::Level::Error,
+            RenameError::AmbiguousLocalDatetime => log::Level::Error,
+            RenameError::IdenticalNames => log::Level::Info,
+        }
+    }
+
+    fn log(&self, path: &Path) {
+        let level = self.log_level();
+        log!(level, "Skipping {}: {}", path.display(), self);
+    }
+
+    fn should_raise(&self) -> bool {
+        self.log_level() > log::Level::Info
+    }
+}
+
+type RenameResult<T> = Result<T, RenameError>;
+
+fn get_target_extension(source_path: &Path) -> RenameResult<&str> {
+    let source_extension = match source_path.extension().and_then(OsStr::to_str) {
+        None => {
+            return Err(RenameError::MissingExtension);
+        }
+        Some(source_extension) => source_extension,
+    };
+    let target_extension = if JPEG_EXTENSIONS.contains(&source_extension) {
+        JPEG_CANONICAL_EXTENSION
+    } else if TIFF_EXTENSIONS.contains(&source_extension) {
+        TIFF_CANONICAL_EXTENSION
+    } else {
+        return Err(RenameError::InvalidExtension);
+    };
+    Ok(target_extension)
+}
+
+fn get_target_file_stem<T>(
+    source_path: &Path,
+    timezone: &T,
+    name_format: &str,
+) -> RenameResult<String>
+where
+    T: TimeZone,
+    T::Offset: fmt::Display,
+{
+    let image = ImageFile::open(source_path).map_err(RenameError::ImageError)?;
+    let naive_datetime = image.get_datetime().map_err(RenameError::ImageError)?;
+    let datetime = match timezone.from_local_datetime(&naive_datetime) {
+        LocalResult::None => {
+            return Err(RenameError::InvalidLocalDatetime);
+        }
+        LocalResult::Single(datetime) => datetime,
+        LocalResult::Ambiguous(..) => {
+            return Err(RenameError::AmbiguousLocalDatetime);
+        }
+    };
+    let file_stem = datetime.format(name_format).to_string();
+    Ok(file_stem)
+}
+
+fn get_target_name<T>(source_path: &Path, timezone: &T, name_format: &str) -> RenameResult<String>
+where
+    T: TimeZone,
+    T::Offset: fmt::Display,
+{
+    let target_extension = get_target_extension(source_path)?;
+    let target_file_stem = get_target_file_stem(source_path, timezone, name_format)?;
+    let mut target_name = target_file_stem;
+    target_name.push('.');
+    target_name.push_str(target_extension);
+    Ok(target_name)
+}
+
+fn get_target_path<T>(source_path: &Path, timezone: &T, name_format: &str) -> RenameResult<PathBuf>
+where
+    T: TimeZone,
+    T::Offset: fmt::Display,
+{
+    if source_path.is_dir() {
+        return Err(RenameError::IsADirectory);
+    }
+    let target_name = get_target_name(source_path, timezone, name_format)?;
+    let parent_path = source_path.parent().unwrap();
+    let target_path = parent_path.join(target_name);
+    if source_path == target_path {
+        return Err(RenameError::IdenticalNames);
+    }
+    Ok(target_path)
+}
 
 pub struct RenameItem {
     pub source_path: PathBuf,
@@ -41,190 +167,122 @@ impl fmt::Display for RenameItem {
     }
 }
 
-enum RenameSkip {
-    Extension,
-    Directory,
-    CantGetDate,
-    WellNamed,
-}
-
-pub struct Renamer<'a> {
+pub struct BatchRenamer<'a> {
     settings: &'a Settings<'a>,
+    should_raise: bool,
 }
 
-impl<'a> Renamer<'a> {
-    const JPEG_EXTENSION: &'static str = "jpg";
-    const JPEG_EXTENSIONS: [&'static str; 4] = [Self::JPEG_EXTENSION, "JPG", "jpeg", "JPEG"];
-    const TIFF_EXTENSION: &'static str = "tiff";
-    const TIFF_EXTENSIONS: [&'static str; 4] = [Self::TIFF_EXTENSION, "tif", "TIF", "TIFF"];
-
+impl<'a> BatchRenamer<'a> {
     pub fn new(settings: &'a Settings<'a>) -> Self {
-        Renamer { settings }
-    }
-
-    fn get_target_extension(&self, source_path: &Path) -> Result<&str, RenameSkip> {
-        let source_extension = source_path
-            .extension()
-            .and_then(OsStr::to_str)
-            .ok_or(RenameSkip::Extension)?;
-        if Self::JPEG_EXTENSIONS.contains(&source_extension) {
-            Ok(Self::JPEG_EXTENSION)
-        } else if Self::TIFF_EXTENSIONS.contains(&source_extension) {
-            Ok(Self::TIFF_EXTENSION)
-        } else {
-            Err(RenameSkip::Extension)
+        Self {
+            settings,
+            should_raise: false,
         }
     }
 
-    fn get_target_file_stem<T>(
-        &self,
-        naive_datetime: &NaiveDateTime,
-        timezone: &T,
-    ) -> Result<String, RenameSkip>
-    where
-        T: TimeZone,
-        T::Offset: fmt::Display,
-    {
-        let datetime = timezone
-            .from_local_datetime(naive_datetime)
-            .single()
-            .ok_or(RenameSkip::CantGetDate)?;
-        Ok(datetime.format(self.settings.name_format).to_string())
-    }
-
-    fn get_target_name(&self, source_path: &Path) -> Result<String, RenameSkip> {
-        let target_extension = self.get_target_extension(&source_path)?;
-        let naive_datetime = ImageFile::open(source_path)
-            .and_then(|imgfile| imgfile.get_datetime())
-            .map_err(|_| RenameSkip::CantGetDate)?;
-        let mut target_name = match self.settings.timezone {
-            None => self.get_target_file_stem(&naive_datetime, &Local),
-            Some(timezone) => self.get_target_file_stem(&naive_datetime, &timezone),
-        }?;
-        target_name.push_str(".");
-        target_name.push_str(target_extension);
-        Ok(target_name)
-    }
-
-    fn get_target_path(&self, source_path: &Path) -> Result<PathBuf, RenameSkip> {
-        if source_path.is_dir() {
-            return Err(RenameSkip::Directory);
-        }
-        let target_path = {
-            let target_name = self.get_target_name(&source_path)?;
-            let parent = source_path.parent().unwrap();
-            parent.join(target_name)
-        };
-        if source_path == target_path {
-            Err(RenameSkip::WellNamed)
-        } else {
-            Ok(target_path)
-        }
-    }
-
-    fn log_rename_skip(&self, rename_error: &RenameSkip, source_path: &Path) {
-        let (log_level, reason) = match rename_error {
-            RenameSkip::Extension => (log::Level::Info, "not an EXIF file"),
-            RenameSkip::Directory => (log::Level::Info, "is a directory"),
-            RenameSkip::CantGetDate => (log::Level::Warn, "can't determine date"),
-            RenameSkip::WellNamed => (log::Level::Debug, "already well named"),
-        };
-        log!(
-            log_level,
-            "Skipping file {}: {}",
-            source_path.display(),
-            reason,
-        );
-    }
-
-    pub fn get_rename(&self, source_path: PathBuf) -> Option<RenameItem> {
-        let target_path = match self.get_target_path(&source_path) {
-            Ok(target_path) => target_path,
-            Err(rename_error) => {
-                self.log_rename_skip(&rename_error, &source_path);
-                return None;
-            }
-        };
-        let rename = RenameItem::new(source_path, target_path);
-        Some(rename)
-    }
-
-    pub fn get_renames(&self, source_dir: &Path) -> Option<Vec<RenameItem>> {
+    fn get_source_paths(&mut self, source_dir: &Path) -> Vec<PathBuf> {
         if source_dir.is_file() {
             let source_path = source_dir.to_path_buf();
-            let rename = self.get_rename(source_path);
-            return Some(rename.into_iter().collect());
+            return vec![source_path];
         }
         let direntries = match fs::read_dir(source_dir) {
             Ok(direntries) => direntries,
             Err(err) => {
-                warn!("Can't read directory {}: {}", source_dir.display(), err);
-                return None;
+                error!("Skipping directory {}: {}", source_dir.display(), err);
+                self.should_raise = true;
+                return vec![];
             }
         };
-        let mut direntries: Vec<_> = direntries
+        let mut paths: Vec<_> = direntries
             .filter_map(|direntry| match direntry {
-                Ok(direntry) => Some(direntry),
+                Ok(direntry) => Some(direntry.path()),
                 Err(err) => {
-                    warn!("Skipping file: {}", err);
+                    error!("Skipping file: {}", err);
+                    self.should_raise = true;
                     None
                 }
             })
             .collect();
-        direntries.sort_by_key(fs::DirEntry::path);
-        let renames = direntries
-            .par_iter()
-            .filter_map(|direntry| {
-                let source_path = direntry.path();
-                self.get_rename(source_path)
+        paths.sort();
+        paths
+    }
+
+    fn get_item(&self, source_path: PathBuf) -> Result<RenameItem, bool> {
+        let target_path = match self.settings.timezone {
+            None => get_target_path(&source_path, &Local, self.settings.name_format),
+            Some(timezone) => get_target_path(&source_path, &timezone, self.settings.name_format),
+        };
+        match target_path {
+            Ok(target_path) => {
+                let item = RenameItem::new(source_path, target_path);
+                Ok(item)
+            }
+            Err(err) => {
+                err.log(&source_path);
+                Err(err.should_raise())
+            }
+        }
+    }
+
+    fn get_items(&mut self, source_dir: &Path) -> Vec<RenameItem> {
+        let source_paths = self.get_source_paths(source_dir);
+        let results: Vec<_> = source_paths
+            .into_par_iter()
+            .map(|source_path| self.get_item(source_path))
+            .collect();
+        let items: Vec<_> = results
+            .into_iter()
+            .filter_map(|result| match result {
+                Ok(item) => Some(item),
+                Err(should_raise) => {
+                    if should_raise {
+                        self.should_raise = true
+                    };
+                    None
+                }
             })
             .collect();
-        Some(renames)
+        items
     }
 
-    pub fn apply_rename(&self, rename: &RenameItem) -> bool {
-        match rename.apply() {
-            Ok(_) => true,
+    fn apply_item(&mut self, item: &RenameItem) {
+        match item.apply() {
+            Ok(_) => (),
             Err(err) => {
-                warn!(
+                error!(
                     "Can't rename file {} to {}: {}",
-                    rename.source_path.display(),
-                    rename.target_path.display(),
+                    item.source_path.display(),
+                    item.target_path.display(),
                     err
                 );
-                false
+                self.should_raise = true;
             }
         }
     }
 
-    pub fn apply_renames(&self, renames: &[RenameItem]) -> bool {
-        let mut result = true;
-        for rename in renames {
-            result &= self.apply_rename(rename);
+    fn apply_items(&mut self, items: &[RenameItem]) {
+        for item in items {
+            self.apply_item(item);
         }
-        result
     }
 
-    pub fn run(&self, source_dir: &Path) -> i32 {
-        let renames = match self.get_renames(source_dir) {
-            Some(renames) => renames,
-            None => {
-                return 1;
-            }
-        };
-        if renames.is_empty() {
+    pub fn run(mut self, source_dir: &Path) -> Result<(), ()> {
+        let items = self.get_items(source_dir);
+        if self.should_raise {
+            return Err(());
+        } else if items.is_empty() {
             info!("Nothing to do");
-            return 0;
+            return Ok(());
         };
-        for rename in &renames {
-            println!("{}", rename);
+        for item in &items {
+            println!("{}", item);
         }
-        if !self.settings.dry_run
-            && (self.settings.assume_yes || prompt_confirm())
-            && !self.apply_renames(&renames)
-        {
-            return 2;
-        };
-        0
+        if !self.settings.dry_run && (self.settings.assume_yes || prompt_confirm().unwrap()) {
+            self.apply_items(&items);
+        }
+        if self.should_raise {
+            return Err(());
+        }
+        Ok(())
     }
 }

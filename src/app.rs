@@ -38,7 +38,7 @@ pub fn build_app() -> App<'static, 'static> {
                 .long("log-level")
                 .env("NAMEXIF_LOG_LEVEL")
                 .takes_value(true)
-                .value_name("LOG_LEVEL")
+                .value_name("LEVEL")
                 .help("Log verbosity level"),
         )
         .arg(

@@ -39,7 +39,7 @@ impl fmt::Display for RenameError {
             RenameError::ImageError(err) => err.fmt(f),
             RenameError::InvalidLocalDatetime => write!(f, "Invalid local time representation"),
             RenameError::AmbiguousLocalDatetime => write!(f, "Ambiguous local time representation"),
-            RenameError::IdenticalNames => write!(f, "Already well named"),
+            RenameError::IdenticalNames => write!(f, "Does not need renaming"),
         }
     }
 }

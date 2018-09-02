@@ -281,7 +281,9 @@ impl<'a> BatchRenamer<'a> {
         for item in &items {
             println!("{}", item);
         }
-        if !self.settings.dry_run && (self.settings.assume_yes || prompt_confirm().unwrap()) {
+        if !self.settings.dry_run
+            && (self.settings.assume_yes || prompt_confirm("OK?", false).unwrap())
+        {
             self.apply_items(&items);
         }
         if self.should_raise {

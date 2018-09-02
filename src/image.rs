@@ -10,8 +10,8 @@ use exif;
 
 #[derive(Debug)]
 pub enum ImageError {
-    Io(io::Error),
-    Exif(exif::Error),
+    IOError(io::Error),
+    ExifError(exif::Error),
     MissingTag(exif::Tag),
     InvalidTag(exif::Tag),
 }
@@ -19,8 +19,8 @@ pub enum ImageError {
 impl fmt::Display for ImageError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ImageError::Io(err) => err.fmt(f),
-            ImageError::Exif(err) => err.fmt(f),
+            ImageError::IOError(err) => err.fmt(f),
+            ImageError::ExifError(err) => err.fmt(f),
             ImageError::MissingTag(tag) => write!(f, "Missing EXIF tag {}", tag),
             ImageError::InvalidTag(tag) => write!(f, "Invalid EXIF tag {}", tag),
         }
@@ -41,9 +41,9 @@ impl ImageFile {
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> ImageResult<Self> {
-        let img_file = File::open(path).map_err(ImageError::Io)?;
+        let img_file = File::open(path).map_err(ImageError::IOError)?;
         let mut img_buff = BufReader::new(img_file);
-        let reader = exif::Reader::new(&mut img_buff).map_err(ImageError::Exif)?;
+        let reader = exif::Reader::new(&mut img_buff).map_err(ImageError::ExifError)?;
         Ok(Self::new(reader))
     }
 
@@ -57,7 +57,7 @@ impl ImageFile {
         let field = self.get_raw_field(tag)?;
         match field.value {
             exif::Value::Ascii(ref ascii) if !ascii.is_empty() => {
-                exif::DateTime::from_ascii(ascii[0]).map_err(ImageError::Exif)
+                exif::DateTime::from_ascii(ascii[0]).map_err(ImageError::ExifError)
             }
             _ => Err(ImageError::InvalidTag(tag)),
         }

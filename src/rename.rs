@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -264,6 +265,26 @@ impl<'a> BatchRenamer<'a> {
         }
     }
 
+    fn check_items(&mut self, items: &[RenameItem]) -> Result<(), ()> {
+        let mut target_paths = HashSet::with_capacity(items.len());
+        let mut should_raise = false;
+        for item in items {
+            if target_paths.contains(&item.source_path) {
+                error!("Source file {} is overwritten", item.source_path.display());
+                should_raise = true;
+            } else if !target_paths.insert(&item.target_path) {
+                error!("Target file {} is overwritten", item.target_path.display());
+                should_raise = true;
+            }
+        }
+        if should_raise {
+            self.should_raise = true;
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+
     fn apply_items(&mut self, items: &[RenameItem]) {
         for item in items {
             self.apply_item(item);
@@ -281,7 +302,8 @@ impl<'a> BatchRenamer<'a> {
         for item in &items {
             println!("{}", item);
         }
-        if !self.settings.dry_run
+        if self.check_items(&items).is_ok()
+            && !self.settings.dry_run
             && (self.settings.assume_yes || prompt_confirm("OK?", false).unwrap())
         {
             self.apply_items(&items);

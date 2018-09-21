@@ -206,8 +206,7 @@ impl<'a> BatchRenamer<'a> {
                     self.should_raise = true;
                     None
                 }
-            })
-            .collect();
+            }).collect();
         paths.sort();
         paths
     }
@@ -245,8 +244,7 @@ impl<'a> BatchRenamer<'a> {
                     };
                     None
                 }
-            })
-            .collect();
+            }).collect();
         items
     }
 

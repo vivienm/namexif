@@ -10,8 +10,7 @@ pub fn build_app() -> App<'static, 'static> {
                 .takes_value(true)
                 .value_name("TIMEZONE")
                 .help("Time zone"),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("format")
                 .short("f")
                 .long("format")
@@ -19,20 +18,17 @@ pub fn build_app() -> App<'static, 'static> {
                 .takes_value(true)
                 .value_name("FORMAT")
                 .help("Filename format"),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("dry_run")
                 .short("n")
                 .long("dry-run")
                 .help("Do not actually rename files"),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("assume_yes")
                 .short("y")
                 .long("assume-yes")
                 .help("Do not prompt for confirmation"),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("log_level")
                 .short("l")
                 .long("log-level")
@@ -40,8 +36,7 @@ pub fn build_app() -> App<'static, 'static> {
                 .takes_value(true)
                 .value_name("LEVEL")
                 .help("Log verbosity level"),
-        )
-        .arg(
+        ).arg(
             Arg::with_name("source")
                 .value_name("SOURCE")
                 .required(true)

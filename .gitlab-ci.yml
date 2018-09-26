@@ -11,6 +11,7 @@ lint:
   stage: lint
   script:
   - cargo fmt -- --check
+  - cargo clippy
 
 test:
   stage: test

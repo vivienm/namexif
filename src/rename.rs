@@ -326,7 +326,7 @@ impl<'a> BatchRenamer<'a> {
         }
         if self.check_items(&items).is_ok()
             && !self.settings.dry_run
-            && (self.settings.assume_yes || prompt_confirm("OK?", false).unwrap())
+            && (self.settings.assume_yes || prompt_confirm("Proceed?", false).unwrap())
         {
             self.apply_items(&items);
         }

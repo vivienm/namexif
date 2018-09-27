@@ -39,7 +39,6 @@ pub fn build_app() -> App<'static, 'static> {
         ).arg(
             Arg::with_name("source")
                 .value_name("SOURCE")
-                .required(true)
                 .index(1)
                 .help("Input image file"),
         )

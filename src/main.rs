@@ -35,7 +35,7 @@ fn init_logger(settings: &Settings) -> Result<(), simplelog::TermLogError> {
 fn main() {
     let matches = build_app().get_matches();
     let settings = Settings::from_matches(&matches);
-    let source_dir = Path::new(matches.value_of("source").unwrap());
+    let source_dir = Path::new(matches.value_of("source").unwrap_or("."));
     init_logger(&settings).unwrap();
     let renamer = BatchRenamer::new(&settings);
     match renamer.run(source_dir) {

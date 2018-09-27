@@ -21,26 +21,54 @@ const TIFF_CANONICAL_EXTENSION: &str = "tiff";
 const TIFF_EXTENSIONS: [&str; 4] = [TIFF_CANONICAL_EXTENSION, "tif", "TIF", "TIFF"];
 
 #[derive(Debug)]
-enum RenameError {
-    IsADirectory,
-    MissingExtension,
-    InvalidExtension,
-    ImageError(ImageError),
+enum SkipError {
+    Directory,
+    Extension,
+    WellNamed,
+}
+
+impl fmt::Display for SkipError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SkipError::Directory => write!(f, "Is a directory"),
+            SkipError::Extension => write!(f, "Not an EXIF file"),
+            SkipError::WellNamed => write!(f, "Does not need renaming"),
+        }
+    }
+}
+
+impl Error for SkipError {}
+
+#[derive(Debug)]
+enum DateError {
     InvalidLocalDatetime,
     AmbiguousLocalDatetime,
-    IdenticalNames,
+}
+
+impl fmt::Display for DateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DateError::InvalidLocalDatetime => write!(f, "Invalid local date"),
+            DateError::AmbiguousLocalDatetime => write!(f, "Ambiguous local date"),
+        }
+    }
+}
+
+impl Error for DateError {}
+
+#[derive(Debug)]
+enum RenameError {
+    Image(ImageError),
+    Skip(SkipError),
+    Date(DateError),
 }
 
 impl fmt::Display for RenameError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RenameError::IsADirectory => write!(f, "Is a directory"),
-            RenameError::MissingExtension => write!(f, "Missing extension"),
-            RenameError::InvalidExtension => write!(f, "Invalid extension"),
-            RenameError::ImageError(err) => err.fmt(f),
-            RenameError::InvalidLocalDatetime => write!(f, "Invalid local time representation"),
-            RenameError::AmbiguousLocalDatetime => write!(f, "Ambiguous local time representation"),
-            RenameError::IdenticalNames => write!(f, "Does not need renaming"),
+            RenameError::Image(err) => err.fmt(f),
+            RenameError::Skip(err) => err.fmt(f),
+            RenameError::Date(err) => err.fmt(f),
         }
     }
 }
@@ -48,15 +76,18 @@ impl fmt::Display for RenameError {
 impl Error for RenameError {}
 
 impl RenameError {
-    fn log_level(&self) -> log::Level {
+    fn should_raise(&self) -> bool {
         match self {
-            RenameError::IsADirectory => log::Level::Info,
-            RenameError::MissingExtension => log::Level::Info,
-            RenameError::InvalidExtension => log::Level::Info,
-            RenameError::ImageError(..) => log::Level::Error,
-            RenameError::InvalidLocalDatetime => log::Level::Error,
-            RenameError::AmbiguousLocalDatetime => log::Level::Error,
-            RenameError::IdenticalNames => log::Level::Info,
+            RenameError::Image(..) | RenameError::Date(..) => true,
+            RenameError::Skip(..) => false,
+        }
+    }
+
+    fn log_level(&self) -> log::Level {
+        if self.should_raise() {
+            log::Level::Error
+        } else {
+            log::Level::Info
         }
     }
 
@@ -64,27 +95,21 @@ impl RenameError {
         let level = self.log_level();
         log!(level, "Skipping {}: {}", path.display(), self);
     }
-
-    fn should_raise(&self) -> bool {
-        self.log_level() > log::Level::Info
-    }
 }
 
 type RenameResult<T> = Result<T, RenameError>;
 
 fn get_target_extension(source_path: &Path) -> RenameResult<&str> {
-    let source_extension = match source_path.extension().and_then(OsStr::to_str) {
-        None => {
-            return Err(RenameError::MissingExtension);
-        }
-        Some(source_extension) => source_extension,
-    };
+    let source_extension = source_path
+        .extension()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| RenameError::Skip(SkipError::Extension))?;
     let target_extension = if JPEG_EXTENSIONS.contains(&source_extension) {
         JPEG_CANONICAL_EXTENSION
     } else if TIFF_EXTENSIONS.contains(&source_extension) {
         TIFF_CANONICAL_EXTENSION
     } else {
-        return Err(RenameError::InvalidExtension);
+        return Err(RenameError::Skip(SkipError::Extension));
     };
     Ok(target_extension)
 }
@@ -98,15 +123,15 @@ where
     T: TimeZone,
     T::Offset: fmt::Display,
 {
-    let image = ImageFile::open(source_path).map_err(RenameError::ImageError)?;
-    let naive_datetime = image.get_datetime().map_err(RenameError::ImageError)?;
+    let image = ImageFile::open(source_path).map_err(RenameError::Image)?;
+    let naive_datetime = image.get_naive_datetime().map_err(RenameError::Image)?;
     let datetime = match timezone.from_local_datetime(&naive_datetime) {
         LocalResult::None => {
-            return Err(RenameError::InvalidLocalDatetime);
+            return Err(RenameError::Date(DateError::InvalidLocalDatetime));
         }
         LocalResult::Single(datetime) => datetime,
         LocalResult::Ambiguous(..) => {
-            return Err(RenameError::AmbiguousLocalDatetime);
+            return Err(RenameError::Date(DateError::AmbiguousLocalDatetime));
         }
     };
     let file_stem = datetime.format(name_format).to_string();
@@ -132,13 +157,13 @@ where
     T::Offset: fmt::Display,
 {
     if source_path.is_dir() {
-        return Err(RenameError::IsADirectory);
+        return Err(RenameError::Skip(SkipError::Directory));
     }
     let target_name = get_target_name(source_path, timezone, name_format)?;
     let parent_path = source_path.parent().unwrap();
     let target_path = parent_path.join(target_name);
     if source_path == target_path {
-        return Err(RenameError::IdenticalNames);
+        return Err(RenameError::Skip(SkipError::WellNamed));
     }
     Ok(target_path)
 }
@@ -238,12 +263,11 @@ impl<'a> BatchRenamer<'a> {
             .into_iter()
             .filter_map(|result| match result {
                 Ok(item) => Some(item),
-                Err(should_raise) => {
-                    if should_raise {
-                        self.should_raise = true
-                    };
+                Err(true) => {
+                    self.should_raise = true;
                     None
                 }
+                Err(false) => None,
             }).collect();
         items
     }

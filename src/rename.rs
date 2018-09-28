@@ -6,7 +6,6 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 
-use chrono::offset::LocalResult;
 use chrono::{Local, TimeZone};
 use log;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -40,27 +39,9 @@ impl fmt::Display for SkipError {
 impl Error for SkipError {}
 
 #[derive(Debug)]
-enum DateError {
-    InvalidLocalDatetime,
-    AmbiguousLocalDatetime,
-}
-
-impl fmt::Display for DateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DateError::InvalidLocalDatetime => write!(f, "Invalid local date"),
-            DateError::AmbiguousLocalDatetime => write!(f, "Ambiguous local date"),
-        }
-    }
-}
-
-impl Error for DateError {}
-
-#[derive(Debug)]
 enum RenameError {
     Image(ImageError),
     Skip(SkipError),
-    Date(DateError),
 }
 
 impl fmt::Display for RenameError {
@@ -68,7 +49,6 @@ impl fmt::Display for RenameError {
         match self {
             RenameError::Image(err) => err.fmt(f),
             RenameError::Skip(err) => err.fmt(f),
-            RenameError::Date(err) => err.fmt(f),
         }
     }
 }
@@ -78,7 +58,7 @@ impl Error for RenameError {}
 impl RenameError {
     fn should_raise(&self) -> bool {
         match self {
-            RenameError::Image(..) | RenameError::Date(..) => true,
+            RenameError::Image(..) => true,
             RenameError::Skip(..) => false,
         }
     }
@@ -124,16 +104,7 @@ where
     T::Offset: fmt::Display,
 {
     let image = ImageFile::open(source_path).map_err(RenameError::Image)?;
-    let naive_datetime = image.get_naive_datetime().map_err(RenameError::Image)?;
-    let datetime = match timezone.from_local_datetime(&naive_datetime) {
-        LocalResult::None => {
-            return Err(RenameError::Date(DateError::InvalidLocalDatetime));
-        }
-        LocalResult::Single(datetime) => datetime,
-        LocalResult::Ambiguous(..) => {
-            return Err(RenameError::Date(DateError::AmbiguousLocalDatetime));
-        }
-    };
+    let datetime = image.get_datetime(timezone).map_err(RenameError::Image)?;
     let file_stem = datetime.format(name_format).to_string();
     Ok(file_stem)
 }

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -84,14 +84,13 @@ fn get_target_extension(source_path: &Path) -> RenameResult<&str> {
         .extension()
         .and_then(OsStr::to_str)
         .ok_or_else(|| RenameError::Skip(SkipError::Extension))?;
-    let target_extension = if JPEG_EXTENSIONS.contains(&source_extension) {
-        JPEG_CANONICAL_EXTENSION
+    if JPEG_EXTENSIONS.contains(&source_extension) {
+        Ok(JPEG_CANONICAL_EXTENSION)
     } else if TIFF_EXTENSIONS.contains(&source_extension) {
-        TIFF_CANONICAL_EXTENSION
+        Ok(TIFF_CANONICAL_EXTENSION)
     } else {
-        return Err(RenameError::Skip(SkipError::Extension));
-    };
-    Ok(target_extension)
+        Err(RenameError::Skip(SkipError::Extension))
+    }
 }
 
 fn get_target_file_stem<T>(
@@ -103,13 +102,16 @@ where
     T: TimeZone,
     T::Offset: fmt::Display,
 {
+    if source_path.is_dir() {
+        return Err(RenameError::Skip(SkipError::Directory));
+    }
     let image = ImageFile::open(source_path).map_err(RenameError::Image)?;
     let datetime = image.get_datetime(timezone).map_err(RenameError::Image)?;
     let file_stem = datetime.format(name_format).to_string();
     Ok(file_stem)
 }
 
-fn get_target_name<T>(source_path: &Path, timezone: &T, name_format: &str) -> RenameResult<String>
+fn get_target_name<T>(source_path: &Path, timezone: &T, name_format: &str) -> RenameResult<OsString>
 where
     T: TimeZone,
     T::Offset: fmt::Display,
@@ -119,7 +121,7 @@ where
     let mut target_name = target_file_stem;
     target_name.push('.');
     target_name.push_str(target_extension);
-    Ok(target_name)
+    Ok(OsString::from(target_name))
 }
 
 fn get_target_path<T>(source_path: &Path, timezone: &T, name_format: &str) -> RenameResult<PathBuf>
@@ -127,9 +129,6 @@ where
     T: TimeZone,
     T::Offset: fmt::Display,
 {
-    if source_path.is_dir() {
-        return Err(RenameError::Skip(SkipError::Directory));
-    }
     let target_name = get_target_name(source_path, timezone, name_format)?;
     let parent_path = source_path.parent().unwrap();
     let target_path = parent_path.join(target_name);
@@ -156,7 +155,7 @@ impl RenameItem {
         fs::rename(&self.source_path, &self.target_path)
     }
 
-    pub fn common_ancestor(&self) -> Option<&Path> {
+    pub fn ancestor(&self) -> Option<&Path> {
         for ancestor in self.source_path.ancestors() {
             if self.target_path.starts_with(ancestor) {
                 return Some(ancestor);
@@ -171,7 +170,7 @@ impl fmt::Display for RenameItem {
         let mut source_path = self.source_path.as_path();
         let mut target_path = self.target_path.as_path();
         let mut ancestor_empty = true;
-        if let Some(ancestor_path) = self.common_ancestor() {
+        if let Some(ancestor_path) = self.ancestor() {
             source_path = self.source_path.strip_prefix(ancestor_path).unwrap();
             target_path = self.target_path.strip_prefix(ancestor_path).unwrap();
             for component in ancestor_path.components() {

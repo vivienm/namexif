@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 
 use chrono::offset::LocalResult;
 use chrono::{Local, TimeZone};
@@ -184,17 +184,78 @@ impl RenameItem {
     pub fn apply(&self) -> io::Result<()> {
         fs::rename(&self.source_path, &self.target_path)
     }
+
+    pub fn common_ancestor(&self) -> Option<&Path> {
+        for ancestor in self.source_path.ancestors() {
+            if self.target_path.starts_with(ancestor) {
+                return Some(ancestor);
+            }
+        }
+        None
+    }
 }
 
 impl fmt::Display for RenameItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut source_path = self.source_path.as_path();
+        let mut target_path = self.target_path.as_path();
+        let mut ancestor_empty = true;
+        if let Some(ancestor_path) = self.common_ancestor() {
+            source_path = self.source_path.strip_prefix(ancestor_path).unwrap();
+            target_path = self.target_path.strip_prefix(ancestor_path).unwrap();
+            for component in ancestor_path.components() {
+                match component {
+                    Component::CurDir => {
+                        continue;
+                    }
+                    _ => {}
+                }
+                write!(f, "{}", component.as_os_str().to_string_lossy())?;
+                ancestor_empty = false;
+                match component {
+                    Component::ParentDir | Component::Normal(_) => {
+                        write!(f, "{}", MAIN_SEPARATOR)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
         write!(
             f,
-            "{} => {}",
-            self.source_path.display(),
-            self.target_path.display(),
-        )
+            "{}{} => {}{}",
+            if ancestor_empty { "" } else { "{" },
+            source_path.display(),
+            target_path.display(),
+            if ancestor_empty { "" } else { "}" },
+        )?;
+        Ok(())
     }
+}
+
+#[test]
+fn test_rename_item_fmt() {
+    fn formatted(source_path: &str, target_path: &str) -> String {
+        let source_path = Path::new(source_path).to_path_buf();
+        let target_path = Path::new(target_path).to_path_buf();
+        let rename_item = RenameItem::new(source_path, target_path);
+        format!("{}", rename_item)
+    }
+
+    assert_eq!(formatted("foo", "bar"), "foo => bar");
+    assert_eq!(formatted("/foo", "/bar"), "/{foo => bar}");
+    assert_eq!(formatted("./foo", "./bar"), "foo => bar");
+    assert_eq!(
+        formatted("path/to/foo", "path/to/bar"),
+        "path/to/{foo => bar}"
+    );
+    assert_eq!(
+        formatted("/path/to/foo", "/path/to/bar"),
+        "/path/to/{foo => bar}"
+    );
+    assert_eq!(
+        formatted("./path/to/foo", "./path/to/bar"),
+        "path/to/{foo => bar}"
+    );
 }
 
 pub struct BatchRenamer<'a> {

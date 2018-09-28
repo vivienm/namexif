@@ -17,6 +17,7 @@ test:
   stage: test
   script:
   - cargo check --verbose
+  - cargo test --verbose
   cache:
     paths:
     - .cargo/

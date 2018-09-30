@@ -22,12 +22,12 @@ pub fn build_app() -> App<'static, 'static> {
             Arg::with_name("dry_run")
                 .short("n")
                 .long("dry-run")
-                .help("Do not actually rename files"),
+                .help("Does not actually rename files"),
         ).arg(
             Arg::with_name("assume_yes")
                 .short("y")
                 .long("assume-yes")
-                .help("Do not prompt for confirmation"),
+                .help("Does not prompt for confirmation"),
         ).arg(
             Arg::with_name("log_level")
                 .short("l")
@@ -40,6 +40,6 @@ pub fn build_app() -> App<'static, 'static> {
             Arg::with_name("source")
                 .value_name("SOURCE")
                 .index(1)
-                .help("Input image file"),
+                .help("Input file or directory"),
         )
 }

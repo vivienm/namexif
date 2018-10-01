@@ -3,6 +3,7 @@ image: registry.gitlab.com/vmaison/docker-ci-rust:latest
 stages:
 - lint
 - test
+- deploy
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
@@ -22,3 +23,10 @@ test:
     paths:
     - .cargo/
     - target/
+
+deploy:
+  stage: deploy
+  script:
+  - curl -X POST -F token="${DEPLOY_TRIGGER_TOKEN}" -F ref="${CI_COMMIT_REF_NAME}" "${DEPLOY_TRIGGER_URL}"
+  only:
+  - master

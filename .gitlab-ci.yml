@@ -27,6 +27,6 @@ test:
 deploy:
   stage: deploy
   script:
-  - curl -X POST -F token="${DEPLOY_TRIGGER_TOKEN}" -F ref="${CI_COMMIT_REF_NAME}" "${DEPLOY_TRIGGER_URL}"
+  - curl -X POST -F token="${DEPLOY_TRIGGER_TOKEN}" -F ref=master "${DEPLOY_TRIGGER_URL}"
   only:
   - master

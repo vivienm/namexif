@@ -1,22 +1,12 @@
-image: registry.gitlab.com/vmaison/docker-ci-rust:latest
-
-stages:
-- lint
-- test
-- deploy
-
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
 
-lint:
-  stage: lint
+test:
+  stage: test
+  image: registry.gitlab.com/vmaison/docker-ci-rust:latest
   script:
   - cargo fmt -- --check
   - cargo clippy
-
-test:
-  stage: test
-  script:
   - cargo check --verbose
   - cargo test --verbose
   cache:
@@ -27,6 +17,6 @@ test:
 deploy:
   stage: deploy
   script:
-  - curl -X POST -F token="${DEPLOY_TRIGGER_TOKEN}" -F ref=master "${DEPLOY_TRIGGER_URL}"
+  - curl -X POST -F "token=${TRIGGER_TOKEN}" -F "ref=${TRIGGER_REF_NAME}" "${TRIGGER_URL}"
   only:
   - master

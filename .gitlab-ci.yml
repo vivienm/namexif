@@ -1,9 +1,8 @@
-variables:
-  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
-
 test:
   stage: test
   image: registry.gitlab.com/vmaison/docker-ci-rust:latest
+  variables:
+    CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
   script:
   - cargo fmt -- --check
   - cargo clippy

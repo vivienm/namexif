@@ -15,6 +15,7 @@ test:
 
 deploy:
   stage: deploy
+  image: registry.gitlab.com/vmaison/docker-archlinux-base:latest
   script:
   - curl -X POST -F "token=${TRIGGER_TOKEN}" -F "ref=${TRIGGER_REF_NAME}" "${TRIGGER_URL}"
   only:

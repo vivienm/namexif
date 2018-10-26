@@ -108,7 +108,7 @@ fn pluralize(value: usize) -> &'static str {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
     Io(io::Error),
     TermLog(simplelog::TermLogError),
@@ -130,10 +130,10 @@ impl error::Error for Error {}
 type Result<T> = result::Result<T, Error>;
 
 fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
-    init_logger(settings).map_err(Error::TermLog)?;
+    init_logger(settings)?;
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-    let renames = get_renames(source_path, settings).map_err(Error::Io)?;
+    let renames = get_renames(source_path, settings)?;
 
     // Look for errors and retrieve paths.
     let mut paths: Vec<(&Path, &Path)> = Vec::with_capacity(renames.len());
@@ -155,7 +155,7 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
 
     // Display paths.
     for (source_path, target_path) in &paths {
-        write_rename(&mut stdout, source_path, target_path).map_err(Error::Io)?;
+        write_rename(&mut stdout, source_path, target_path)?;
     }
 
     // Look for conflicts.
@@ -172,8 +172,7 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
     let mut renamed = 0;
     if !paths.is_empty()
         && !settings.dry_run
-        && (settings.assume_yes
-            || prompt_confirm(&stdin, &mut stdout, "Proceed?", false).map_err(Error::Io)?)
+        && (settings.assume_yes || prompt_confirm(&stdin, &mut stdout, "Proceed?", false)?)
     {
         for (source_path, target_path) in &paths {
             match fs::rename(source_path, target_path) {

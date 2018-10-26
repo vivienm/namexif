@@ -51,23 +51,12 @@ impl fmt::Display for DateError {
 
 impl error::Error for DateError {}
 
-#[derive(Debug)]
+#[derive(Debug, Display, From)]
 pub enum Error {
     Io(io::Error),
     Exif(exif::Error),
     Tag(TagError),
     Date(DateError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::Io(err) => err.fmt(f),
-            Error::Exif(err) => err.fmt(f),
-            Error::Tag(err) => err.fmt(f),
-            Error::Date(err) => err.fmt(f),
-        }
-    }
 }
 
 impl error::Error for Error {}
@@ -84,9 +73,9 @@ impl Image {
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let img_file = File::open(path).map_err(Error::Io)?;
+        let img_file = File::open(path)?;
         let mut img_buff = io::BufReader::new(img_file);
-        let reader = exif::Reader::new(&mut img_buff).map_err(Error::Exif)?;
+        let reader = exif::Reader::new(&mut img_buff)?;
         Ok(Self::new(reader))
     }
 

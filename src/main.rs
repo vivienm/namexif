@@ -2,6 +2,8 @@ extern crate chrono;
 extern crate chrono_tz;
 #[macro_use]
 extern crate clap;
+#[macro_use]
+extern crate derive_more;
 extern crate exif;
 #[macro_use]
 extern crate log;

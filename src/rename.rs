@@ -32,19 +32,10 @@ impl fmt::Display for SkipError {
 
 impl error::Error for SkipError {}
 
-#[derive(Debug)]
+#[derive(Debug, Display, From)]
 pub enum Error {
     Image(image::Error),
     Skip(SkipError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::Image(err) => err.fmt(f),
-            Error::Skip(err) => err.fmt(f),
-        }
-    }
 }
 
 impl error::Error for Error {}
@@ -173,8 +164,8 @@ where
     if source_path.is_dir() {
         return Err(Error::Skip(SkipError::Directory));
     }
-    let image = image::Image::open(source_path).map_err(Error::Image)?;
-    let datetime = image.get_datetime(timezone).map_err(Error::Image)?;
+    let image = image::Image::open(source_path)?;
+    let datetime = image.get_datetime(timezone)?;
     let file_stem = datetime.format(name_format).to_string();
     Ok(file_stem)
 }

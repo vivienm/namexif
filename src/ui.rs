@@ -7,11 +7,12 @@ use std::process;
 use std::result;
 
 use chrono;
+use derive_more::From;
 use log;
 use simplelog;
 
-use rename;
-use settings::Settings;
+use crate::rename;
+use crate::settings::Settings;
 
 fn init_logger(settings: &Settings) -> result::Result<(), simplelog::TermLogError> {
     let config = simplelog::Config {
@@ -141,10 +142,10 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
     for (source_path, target_path) in renames.iter() {
         match target_path {
             Err(rename::Error::Skip(err)) => {
-                info!("Skipping file {}: {}", source_path.display(), err);
+                log::info!("Skipping file {}: {}", source_path.display(), err);
             }
             Err(rename::Error::Image(err)) => {
-                error!("Skipping file {}: {}", source_path.display(), err);
+                log::error!("Skipping file {}: {}", source_path.display(), err);
                 errors += 1;
             }
             Ok(target_path) => {
@@ -161,7 +162,7 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
     // Look for conflicts.
     let mut conflicts = 0;
     for conflict in renames.conflicts() {
-        error!("{}", conflict);
+        log::error!("{}", conflict);
         conflicts += 1;
     }
     if conflicts > 0 {
@@ -177,7 +178,7 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
         for (source_path, target_path) in &paths {
             match fs::rename(source_path, target_path) {
                 Err(err) => {
-                    error!(
+                    log::error!(
                         "Can't rename {} to {}: {}",
                         source_path.display(),
                         target_path.display(),
@@ -197,15 +198,15 @@ fn try_run(source_path: &Path, settings: &Settings) -> Result<(usize, usize)> {
 pub fn run(source_path: &Path, settings: &Settings) -> ! {
     match try_run(source_path, settings) {
         Ok((0, 0)) => {
-            info!("Nothing to do");
+            log::info!("Nothing to do");
             process::exit(0);
         }
         Ok((renamed, 0)) => {
-            info!("{} renamed file{}", renamed, pluralize(renamed));
+            log::info!("{} renamed file{}", renamed, pluralize(renamed));
             process::exit(0);
         }
         Ok((renamed, errors)) => {
-            info!(
+            log::info!(
                 "{} renamed file{}, {} error{}",
                 renamed,
                 pluralize(renamed),
@@ -215,7 +216,7 @@ pub fn run(source_path: &Path, settings: &Settings) -> ! {
             process::exit(1);
         }
         Err(err) => {
-            error!("{}", err);
+            log::error!("{}", err);
             process::exit(2);
         }
     }

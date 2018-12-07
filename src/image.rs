@@ -7,6 +7,7 @@ use std::result;
 
 use chrono::offset::LocalResult;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone};
+use derive_more::{Display, From};
 use exif;
 
 #[derive(Debug)]

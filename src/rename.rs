@@ -9,9 +9,10 @@ use std::path::{Path, PathBuf};
 use std::result;
 
 use chrono::TimeZone;
+use derive_more::{Display, From};
 use rayon::iter::{FromParallelIterator, IntoParallelIterator, ParallelIterator};
 
-use image;
+use crate::image;
 
 #[derive(Debug)]
 pub enum SkipError {

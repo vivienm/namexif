@@ -1,5 +1,5 @@
 use chrono_tz::Tz;
-use clap;
+use clap::{value_t_or_exit, ArgMatches};
 use log;
 
 pub struct Settings<'a> {
@@ -11,7 +11,7 @@ pub struct Settings<'a> {
 }
 
 impl<'a> Settings<'a> {
-    pub fn from_matches(matches: &'a clap::ArgMatches) -> Self {
+    pub fn from_matches(matches: &'a ArgMatches) -> Self {
         Settings {
             name_format: matches.value_of("format").unwrap_or("%Y-%m-%dT%H:%M:%S%z"),
             timezone: matches

@@ -37,7 +37,7 @@ fn prompt_confirm(
         stdout.flush()?;
         stdin.read_line(&mut input)?;
         {
-            let input = input.trim_right();
+            let input = input.trim_end();
             match input {
                 "" => return Ok(default),
                 "y" | "Y" => return Ok(true),

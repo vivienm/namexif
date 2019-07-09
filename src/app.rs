@@ -1,4 +1,7 @@
-use clap::{app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, Arg};
+use clap::{
+    app_from_crate, crate_authors, crate_description, crate_name, crate_version, App, AppSettings,
+    Arg,
+};
 
 pub fn build_app() -> App<'static, 'static> {
     app_from_crate!()
@@ -47,4 +50,5 @@ pub fn build_app() -> App<'static, 'static> {
                 .index(1)
                 .help("Input file or directory"),
         )
+        .setting(AppSettings::ColoredHelp)
 }

@@ -8,7 +8,6 @@ use std::result;
 use chrono::offset::LocalResult;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone};
 use derive_more::{Display, From};
-use exif;
 
 #[derive(Debug)]
 pub enum TagError {
@@ -83,7 +82,7 @@ impl Image {
     fn get_exif_field(&self, tag: exif::Tag) -> Result<&exif::Field> {
         self.reader
             .get_field(tag, false)
-            .ok_or_else(|| Error::Tag(TagError::Missing))
+            .ok_or(Error::Tag(TagError::Missing))
     }
 
     fn get_exif_datetime_with(&self, tag: exif::Tag) -> Result<exif::DateTime> {

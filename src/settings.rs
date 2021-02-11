@@ -1,6 +1,5 @@
 use chrono_tz::Tz;
 use clap::{value_t_or_exit, ArgMatches};
-use log;
 
 pub struct Settings<'a> {
     pub name_format: &'a str,

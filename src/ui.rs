@@ -6,10 +6,7 @@ use std::path::{Component, Path, MAIN_SEPARATOR};
 use std::process;
 use std::result;
 
-use chrono;
 use derive_more::From;
-use log;
-use simplelog;
 
 use crate::rename;
 use crate::settings::Settings;

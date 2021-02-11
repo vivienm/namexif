@@ -147,7 +147,7 @@ fn get_target_extension(source_path: &Path) -> Result<&str> {
     let source_extension = source_path
         .extension()
         .and_then(OsStr::to_str)
-        .ok_or_else(|| Error::Skip(SkipError::Extension))?;
+        .ok_or(Error::Skip(SkipError::Extension))?;
     if JPEG_EXTENSIONS.contains(&source_extension) {
         Ok(JPEG_CANONICAL_EXTENSION)
     } else if TIFF_EXTENSIONS.contains(&source_extension) {

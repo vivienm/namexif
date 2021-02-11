@@ -11,15 +11,9 @@ use derive_more::From;
 use crate::rename;
 use crate::settings::Settings;
 
-fn init_logger(settings: &Settings) -> result::Result<(), simplelog::TermLogError> {
-    let config = simplelog::Config {
-        time: None,
-        level: Some(log::Level::Info),
-        target: None,
-        location: None,
-        time_format: None,
-    };
-    simplelog::TermLogger::init(settings.log_level, config)
+fn init_logger(settings: &Settings) -> result::Result<(), log::SetLoggerError> {
+    let config = simplelog::Config::default();
+    simplelog::TermLogger::init(settings.log_level, config, simplelog::TerminalMode::Stderr)
 }
 
 fn prompt_confirm(
@@ -109,7 +103,7 @@ fn pluralize(value: usize) -> &'static str {
 #[derive(Debug, From)]
 pub enum Error {
     Io(io::Error),
-    TermLog(simplelog::TermLogError),
+    Log(log::SetLoggerError),
     Conflicts(usize),
 }
 
@@ -117,7 +111,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Io(err) => err.fmt(f),
-            Error::TermLog(err) => err.fmt(f),
+            Error::Log(err) => err.fmt(f),
             Error::Conflicts(n) => write!(f, "{} conflicting file{}", n, pluralize(*n)),
         }
     }

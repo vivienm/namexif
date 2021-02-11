@@ -64,24 +64,24 @@ impl error::Error for Error {}
 pub type Result<T> = result::Result<T, Error>;
 
 pub struct Image {
-    reader: exif::Reader,
+    exif: exif::Exif,
 }
 
 impl Image {
-    fn new(reader: exif::Reader) -> Image {
-        Self { reader }
+    fn new(exif: exif::Exif) -> Image {
+        Self { exif }
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let img_file = File::open(path)?;
         let mut img_buff = io::BufReader::new(img_file);
-        let reader = exif::Reader::new(&mut img_buff)?;
-        Ok(Self::new(reader))
+        let exif = exif::Reader::new().read_from_container(&mut img_buff)?;
+        Ok(Self::new(exif))
     }
 
     fn get_exif_field(&self, tag: exif::Tag) -> Result<&exif::Field> {
-        self.reader
-            .get_field(tag, false)
+        self.exif
+            .get_field(tag, exif::In::PRIMARY)
             .ok_or(Error::Tag(TagError::Missing))
     }
 
@@ -89,7 +89,7 @@ impl Image {
         let field = self.get_exif_field(tag)?;
         match field.value {
             exif::Value::Ascii(ref ascii) if !ascii.is_empty() => {
-                exif::DateTime::from_ascii(ascii[0]).map_err(Error::Exif)
+                exif::DateTime::from_ascii(&ascii[0]).map_err(Error::Exif)
             }
             _ => Err(Error::Tag(TagError::Invalid)),
         }

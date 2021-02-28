@@ -1,5 +1,3 @@
-use std::error;
-use std::fmt;
 use std::fs::File;
 use std::io;
 use std::path::Path;
@@ -7,59 +5,31 @@ use std::result;
 
 use chrono::offset::LocalResult;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone};
-use derive_more::{Display, From};
+use derive_more::{Display, Error, From};
 
-#[derive(Debug)]
+#[derive(Debug, Display, Error)]
 pub enum TagError {
+    #[display("Missing EXIF tag")]
     Missing,
+    #[display("Invalid EXIF tag")]
     Invalid,
 }
 
-impl fmt::Display for TagError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} EXIF tag",
-            match self {
-                TagError::Missing => "Missing",
-                TagError::Invalid => "Invalid",
-            },
-        )
-    }
-}
-
-impl error::Error for TagError {}
-
-#[derive(Debug)]
+#[derive(Debug, Display, Error)]
 pub enum DateError {
+    #[display("Invalid local date")]
     InvalidLocalDatetime,
+    #[display("Ambiguous local date")]
     AmbiguousLocalDatetime,
 }
 
-impl fmt::Display for DateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                DateError::InvalidLocalDatetime => "Invalid local date",
-                DateError::AmbiguousLocalDatetime => "Ambiguous local date",
-            },
-        )
-    }
-}
-
-impl error::Error for DateError {}
-
-#[derive(Debug, Display, From)]
+#[derive(Debug, Error, Display, From)]
 pub enum Error {
     Io(io::Error),
     Exif(exif::Error),
     Tag(TagError),
     Date(DateError),
 }
-
-impl error::Error for Error {}
 
 pub type Result<T> = result::Result<T, Error>;
 

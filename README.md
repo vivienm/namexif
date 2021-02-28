@@ -1,6 +1,6 @@
 # namexif
 
-Rename photos according to their EXIF date.
+Rename photos according to their EXIF date tag.
 
 ## Screenshot
 
@@ -8,14 +8,8 @@ Rename photos according to their EXIF date.
 
 ## Installation
 
-```bash
-git clone https://github.com/vivienm/gitree
-cd gitree
+You may install `namexif` locally by running
 
-cargo build
-cargo test
-cargo install
-
-export PATH="$HOME/.cargo/bin:$PATH"
-gitree --help
+```console
+$ cargo install --git https://github.com/vivienm/namexif.git
 ```

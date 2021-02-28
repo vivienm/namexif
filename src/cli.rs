@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use chrono_tz::Tz;
+use structopt::clap::Shell;
 use structopt::StructOpt;
 
 /// Rename photos according to their EXIF date tag
@@ -13,6 +14,12 @@ pub struct Args {
     /// Does not actually rename files
     #[structopt(short = "n", long = "dry-run")]
     pub dry_run: bool,
+    /// Generates a completion file
+    #[structopt(
+        long = "completion",
+        possible_values = &Shell::variants(),
+    )]
+    pub completion: Option<Shell>,
     /// Log verbosity level
     #[structopt(
         short = "l",

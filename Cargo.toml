@@ -5,6 +5,7 @@ authors = ["Vivien Maisonneuve <v.maisonneuve@gmail.com>"]
 edition = "2018"
 description = "Rename photos according to their EXIF date tag"
 license = "MIT"
+build = "build.rs"
 
 [dependencies]
 chrono = "0.4.19"
@@ -14,4 +15,9 @@ kamadak-exif = "0.5.3"
 log = "0.4.14"
 rayon = "1.5.0"
 simplelog = "0.9.0"
+structopt = "0.3.21"
+
+[build-dependencies]
+chrono-tz = "0.5.3"
+log = "0.4.14"
 structopt = "0.3.21"

@@ -1,0 +1,25 @@
+name: Cloud storage
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  upload:
+    name: Upload
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Extract branch name
+      run: echo "##[set-output name=branch;]${GITHUB_REF#refs/heads/}"
+      id: extract_branch
+    - uses: actions-rs/cargo@v1
+      with:
+        command: install
+        args: --no-track --locked --root cargo --path .
+    - uses: google-github-actions/upload-cloud-storage@main
+      with:
+        credentials: ${{ secrets.GCP_CREDENTIALS }}
+        path: cargo/bin
+        destination: ${{ secrets.GCS_BUCKET }}/${{ steps.extract_branch.outputs.branch }}

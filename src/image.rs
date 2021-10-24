@@ -9,17 +9,17 @@ use derive_more::{Display, Error, From};
 
 #[derive(Debug, Display, Error)]
 pub enum TagError {
-    #[display("Missing EXIF tag")]
+    #[display(fmt = "Missing EXIF tag")]
     Missing,
-    #[display("Invalid EXIF tag")]
+    #[display(fmt = "Invalid EXIF tag")]
     Invalid,
 }
 
 #[derive(Debug, Display, Error)]
 pub enum DateError {
-    #[display("Invalid local date")]
+    #[display(fmt = "Invalid local date")]
     InvalidLocalDatetime,
-    #[display("Ambiguous local date")]
+    #[display(fmt = "Ambiguous local date")]
     AmbiguousLocalDatetime,
 }
 

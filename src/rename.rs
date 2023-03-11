@@ -1,12 +1,11 @@
-use std::collections::btree_map;
-use std::collections::hash_set;
-use std::error;
-use std::ffi::{OsStr, OsString};
-use std::fmt;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::result;
+use std::{
+    collections::{btree_map, hash_set},
+    error,
+    ffi::{OsStr, OsString},
+    fmt, fs, io,
+    path::{Path, PathBuf},
+    result,
+};
 
 use chrono::TimeZone;
 use derive_more::{Display, From};

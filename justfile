@@ -1,34 +1,25 @@
-DEFAULT: ci
-cargo := "cargo"
-
-build:
-    {{cargo}} build
-
-run +args="":
-    {{cargo}} run -- {{args}}
-
-clean:
-    rm -fr "{{justfile_directory()}}/target"
-
-install:
-    {{cargo}} install --path "{{justfile_directory()}}"
-
-uninstall:
-    {{cargo}} uninstall "$({{cargo}} pkgid)"
-
-ci: check test fmt clippy audit
-
-check:
-    {{cargo}} check
-
-test:
-    {{cargo}} test
+DEFAULT: fmt check test clippy doc deny typos
 
 fmt:
-    {{cargo}} fmt --all -- --check
+    cargo fmt --check
 
-clippy:
-    {{cargo}} clippy -- -D warnings
+build *args="":
+    cargo build {{args}}
 
-audit:
-    {{cargo}} audit
+check:
+    cargo check --all-targets
+
+test *args="":
+    cargo test {{args}}
+
+clippy *args="":
+    cargo clippy {{args}}
+
+doc *args="":
+    cargo doc --no-deps {{args}}
+
+deny:
+    cargo deny check
+
+typos:
+    typos

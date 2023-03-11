@@ -1,15 +1,14 @@
-use std::fmt;
-use std::fs;
-use std::io::{self, Write};
-use std::path::{Component, Path, MAIN_SEPARATOR};
-use std::process;
-use std::result;
+use std::{
+    fmt, fs,
+    io::{self, Write},
+    path::{Component, Path, MAIN_SEPARATOR},
+    process, result,
+};
 
 use clap::CommandFactory;
 use derive_more::{Error, From};
 
-use crate::cli::Args;
-use crate::rename;
+use crate::{cli::Args, rename};
 
 #[inline]
 fn pluralize(value: usize) -> &'static str {

@@ -78,12 +78,9 @@ pub fn get_renames(args: &Args) -> io::Result<rename::Renames> {
 }
 
 pub fn common_ancestor<'a>(source_path: &'a Path, target_path: &'a Path) -> Option<&'a Path> {
-    for ancestor in source_path.ancestors() {
-        if target_path.starts_with(ancestor) {
-            return Some(ancestor);
-        }
-    }
-    None
+    source_path
+        .ancestors()
+        .find(|&ancestor| target_path.starts_with(ancestor))
 }
 
 fn write_rename<W>(f: &mut W, source_path: &Path, target_path: &Path) -> io::Result<()>

@@ -1,4 +1,4 @@
-use structopt::StructOpt;
+use clap::Parser;
 
 mod app;
 mod cli;
@@ -6,5 +6,5 @@ mod image;
 mod rename;
 
 fn main() {
-    app::main(&cli::Args::from_args())
+    app::main(&cli::Args::parse())
 }

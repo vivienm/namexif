@@ -1,38 +1,32 @@
 use std::path::PathBuf;
 
 use chrono_tz::Tz;
-use structopt::clap::Shell;
-use structopt::StructOpt;
+use clap_complete::Shell;
 
 /// Rename photos according to their EXIF date tag
-#[derive(Debug, StructOpt)]
-#[structopt(global_setting = structopt::clap::AppSettings::ColoredHelp)]
+#[derive(Debug, clap::Parser)]
 pub struct Args {
     /// Does not prompt for confirmation
-    #[structopt(short = "y", long = "assume-yes")]
+    #[clap(short = 'y', long = "assume-yes")]
     pub assume_yes: bool,
     /// Does not actually rename files
-    #[structopt(short = "n", long = "dry-run")]
+    #[clap(short = 'n', long = "dry-run")]
     pub dry_run: bool,
     /// Generates a completion file
-    #[structopt(
-        long = "completion",
-        possible_values = &Shell::variants(),
-    )]
+    #[clap(long = "completion")]
     pub completion: Option<Shell>,
     /// Log verbosity level
-    #[structopt(
-        short = "l",
+    #[clap(
+        short = 'l',
         long = "log-level",
         value_name = "level",
         env = "NAMEXIF_LOG_LEVEL",
-        default_value = "info",
-        possible_values = &["off", "error", "warn", "info", "debug", "trace"]
+        default_value = "info"
     )]
     pub log_level: log::LevelFilter,
     /// Filename format
-    #[structopt(
-        short = "f",
+    #[clap(
+        short = 'f',
         long = "format",
         value_name = "format",
         env = "NAMEXIF_FORMAT",
@@ -40,9 +34,9 @@ pub struct Args {
     )]
     pub name_format: String,
     /// Time zone
-    #[structopt(short = "z", long = "timezone", env = "NAMEXIF_TIMEZONE")]
+    #[clap(short = 'z', long = "timezone", env = "NAMEXIF_TIMEZONE")]
     pub timezone: Option<Tz>,
     /// Input file or directory
-    #[structopt(value_name = "input", default_value = ".", parse(from_os_str))]
+    #[clap(value_name = "input", default_value = ".")]
     pub source_path: PathBuf,
 }

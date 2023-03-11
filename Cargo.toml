@@ -5,19 +5,18 @@ authors = ["Vivien Maisonneuve <v.maisonneuve@gmail.com>"]
 edition = "2021"
 description = "Rename photos according to their EXIF date tag"
 license = "MIT"
-build = "build.rs"
 
 [dependencies]
 chrono = "0.4.23"
 chrono-tz = "0.8.1"
+clap = { version = "4.1.8", features = ["derive", "env"] }
+clap_complete = "4.1.4"
 derive_more = "0.99.17"
 kamadak-exif = "0.5.5"
 log = "0.4.17"
 rayon = "1.7.0"
 simplelog = "0.12.1"
-structopt = "0.3.26"
 
 [build-dependencies]
 chrono-tz = "0.8.1"
 log = "0.4.17"
-structopt = "0.3.26"

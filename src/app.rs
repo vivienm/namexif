@@ -5,9 +5,8 @@ use std::path::{Component, Path, MAIN_SEPARATOR};
 use std::process;
 use std::result;
 
+use clap::CommandFactory;
 use derive_more::{Error, From};
-use structopt::clap::crate_name;
-use structopt::StructOpt;
 
 use crate::cli::Args;
 use crate::rename;
@@ -190,7 +189,9 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
 
 pub fn main(args: &Args) -> ! {
     if let Some(shell) = args.completion {
-        Args::clap().gen_completions_to(crate_name!(), shell, &mut io::stdout());
+        let mut cmd = Args::command();
+        let cmd = &mut cmd;
+        clap_complete::generate(shell, cmd, cmd.get_name().to_string(), &mut io::stdout());
         process::exit(0);
     }
     match try_run(args) {

@@ -29,6 +29,8 @@ pub enum Error {
     Exif(exif::Error),
     Tag(TagError),
     Date(DateError),
+    #[display(fmt = "Date or time out of range")]
+    OutOfRange,
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -67,8 +69,10 @@ impl Image {
 
     fn get_naive_datetime_with(&self, tag: exif::Tag) -> Result<NaiveDateTime> {
         let edt = self.get_exif_datetime_with(tag)?;
-        let date = NaiveDate::from_ymd(edt.year.into(), edt.month.into(), edt.day.into());
-        Ok(date.and_hms(edt.hour.into(), edt.minute.into(), edt.second.into()))
+        let date = NaiveDate::from_ymd_opt(edt.year.into(), edt.month.into(), edt.day.into())
+            .ok_or(Error::OutOfRange)?;
+        date.and_hms_opt(edt.hour.into(), edt.minute.into(), edt.second.into())
+            .ok_or(Error::OutOfRange)
     }
 
     pub fn get_naive_datetime(&self) -> Result<NaiveDateTime> {

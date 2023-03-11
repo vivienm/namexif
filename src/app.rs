@@ -43,7 +43,12 @@ pub type Result<T> = result::Result<T, Error>;
 
 fn init_logger(args: &Args) -> result::Result<(), log::SetLoggerError> {
     let config = simplelog::Config::default();
-    simplelog::TermLogger::init(args.log_level, config, simplelog::TerminalMode::Stderr)
+    simplelog::TermLogger::init(
+        args.log_level,
+        config,
+        simplelog::TerminalMode::Stderr,
+        simplelog::ColorChoice::Auto,
+    )
 }
 
 fn prompt_confirm(

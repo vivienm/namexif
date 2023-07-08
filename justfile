@@ -13,7 +13,7 @@ test *args="":
     cargo test {{args}}
 
 clippy *args="":
-    cargo clippy {{args}}
+    cargo clippy --all-targets {{args}}
 
 doc *args="":
     cargo doc --no-deps {{args}}

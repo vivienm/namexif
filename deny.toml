@@ -1,7 +1,11 @@
+[advisories]
+version = 2
+
 [bans]
 multiple-versions = "allow"
 
 [licenses]
+version = 2
 allow = [
   "Apache-2.0",
   "BSD-2-Clause",

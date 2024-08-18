@@ -1,19 +1,16 @@
 # Changes here will be overwritten by Copier. NEVER EDIT MANUALLY.
 
-_commit: 63e7058
+_commit: 56e8180
 _src_path: gh:vivienm/copier-rust
-author_fullname: Vivien Maisonneuve
+author_name: Vivien Maisonneuve
 copyright_holder: Vivien Maisonneuve
-copyright_license: MIT
 copyright_year: 2023
+github_account: vivienm
+hosting_platform: github
+license: MIT
 package_name: namexif
-pages_enabled: false
 project_description: Rename photos according to their EXIF date tag.
 project_name: namexif
-project_type: bin
-repository_hosted: true
-repository_name: namexif
-repository_namespace: vivienm
-repository_provider: github.com
-repository_url: https://github.com/vivienm/namexif
-rust_toolchain: nightly
+project_type: application
+repo_name: namexif
+rust_toolchain: stable

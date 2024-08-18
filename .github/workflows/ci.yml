@@ -1,4 +1,4 @@
-name: "Continuous integration"
+name: "CI"
 
 on:
   push:
@@ -10,32 +10,40 @@ concurrency:
 
 jobs:
   just:
+    name: "Just"
     runs-on: "ubuntu-latest"
     steps:
-    - uses: "actions/checkout@v3"
-    - uses: "dtolnay/rust-toolchain@nightly"
-      with:
-        components: "clippy, rustfmt"
-    - uses: "actions/cache@v3"
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          ~/.cargo/.crates.toml
-          ~/.cargo/.crates2.json
-          target/
-        key: "${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}"
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    - run: "cargo install just cargo-deny typos-cli"
-    - run: "just"
-      env:
-        RUSTFLAGS: "-D warnings"
-        RUSTDOCFLAGS: "-D warnings"
-    - uses: "actions/upload-artifact@v3"
-      with:
-        name: "doc"
-        path: "./target/doc"
-        retention-days: 7
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+      - name: "Install the Rust toolchain"
+        uses: "dtolnay/rust-toolchain@stable"
+        with:
+          components: "clippy, rustfmt"
+      - name: "Install sccache"
+        uses: "mozilla-actions/sccache-action@v0.0.5"
+      - name: "Set up sccache"
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> "${GITHUB_ENV}"
+          echo "SCCACHE_GHA_ENABLED=true" >> "${GITHUB_ENV}"
+      - name: "Install development tools"
+        uses: "taiki-e/install-action@v2"
+        with:
+          tool: "just, cargo-audit, typos"
+      - name: "Cache Cargo directories"
+        uses: "actions/cache@v4"
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+            ~/.cargo/advisory-db/
+            target/
+          key: "${{ runner.os }}-cargo-${{ hashFiles('Cargo.toml', 'Cargo.lock') }}"
+          restore-keys: "${{ runner.os }}-cargo-"
+      - name: "Run Just"
+        run: "just ci"
+        env:
+          RUSTFLAGS: "-D warnings"
+          RUSTDOCFLAGS: "-D warnings"

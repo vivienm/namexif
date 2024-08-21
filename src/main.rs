@@ -11,8 +11,8 @@ use std::{
 use chrono_tz::Tz;
 use derive_more::{Error, From};
 
-/// Rename photos according to their EXIF date tag
 #[derive(Debug, clap::Parser)]
+#[clap(about)]
 pub struct Args {
     /// Does not prompt for confirmation
     #[clap(short = 'y', long = "assume-yes")]
@@ -20,14 +20,6 @@ pub struct Args {
     /// Does not actually rename files
     #[clap(short = 'n', long = "dry-run")]
     pub dry_run: bool,
-    /// Log verbosity level
-    #[clap(
-        short = 'l',
-        long = "log-level",
-        value_name = "level",
-        env = "NAMEXIF_LOG_LEVEL",
-        default_value = "info"
-    )]
     /// Filename format
     #[clap(
         short = 'f',
@@ -40,20 +32,15 @@ pub struct Args {
     /// Time zone
     #[clap(short = 'z', long = "timezone", env = "NAMEXIF_TIMEZONE")]
     pub timezone: Option<Tz>,
-    /// Set the verbosity level for log messages.
-    #[clap(
-        short,
-        long,
-        default_value = "info",
-        env = "{{ package_name | replace('-', '_') | upper }}_LOG_LEVEL"
-    )]
-    log_level: tracing::level_filters::LevelFilter,
     /// Generate the completion script for the specified shell.
     #[clap(long, exclusive = true, name = "SHELL")]
     completion: Option<clap_complete::Shell>,
     /// Input file or directory
     #[clap(value_name = "input", default_value = ".")]
     pub source_path: PathBuf,
+    /// Set the verbosity level for log messages.
+    #[clap(global = true, long, default_value = "info", env = "NAMEXIF_LOG_LEVEL")]
+    log_level: tracing::level_filters::LevelFilter,
 }
 
 #[inline]

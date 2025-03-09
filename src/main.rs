@@ -15,13 +15,13 @@ use derive_more::{Error, From};
 #[clap(about)]
 pub struct Args {
     /// Does not prompt for confirmation
-    #[clap(short = 'y', long = "assume-yes")]
+    #[arg(short = 'y', long = "assume-yes")]
     pub assume_yes: bool,
     /// Does not actually rename files
-    #[clap(short = 'n', long = "dry-run")]
+    #[arg(short = 'n', long = "dry-run")]
     pub dry_run: bool,
     /// Filename format
-    #[clap(
+    #[arg(
         short = 'f',
         long = "format",
         value_name = "format",
@@ -30,16 +30,16 @@ pub struct Args {
     )]
     pub name_format: String,
     /// Time zone
-    #[clap(short = 'z', long = "timezone", env = "NAMEXIF_TIMEZONE")]
+    #[arg(short = 'z', long = "timezone", env = "NAMEXIF_TIMEZONE")]
     pub timezone: Option<Tz>,
     /// Generate the completion script for the specified shell.
-    #[clap(long, exclusive = true, name = "SHELL")]
+    #[arg(long, exclusive = true, name = "SHELL")]
     completion: Option<clap_complete::Shell>,
     /// Input file or directory
-    #[clap(value_name = "input", default_value = ".")]
+    #[arg(value_name = "input", default_value = ".")]
     pub source_path: PathBuf,
     /// Set the verbosity level for log messages.
-    #[clap(global = true, long, default_value = "info", env = "NAMEXIF_LOG_LEVEL")]
+    #[arg(global = true, long, default_value = "info", env = "NAMEXIF_LOG_LEVEL")]
     log_level: tracing::level_filters::LevelFilter,
 }
 

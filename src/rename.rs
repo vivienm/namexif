@@ -54,9 +54,9 @@ pub struct Conflict<'a> {
     pub path: &'a Path,
 }
 
-impl<'a> error::Error for Conflict<'a> {}
+impl error::Error for Conflict<'_> {}
 
-impl<'a> fmt::Display for Conflict<'a> {
+impl fmt::Display for Conflict<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,

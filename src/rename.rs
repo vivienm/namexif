@@ -111,14 +111,14 @@ pub struct Renames {
 }
 
 impl Renames {
-    pub fn conflicts(&self) -> Conflicts {
+    pub fn conflicts(&self) -> Conflicts<'_> {
         Conflicts {
             items: self.iter(),
             target_paths: hash_set::HashSet::with_capacity(self.items.len()),
         }
     }
 
-    pub fn iter(&self) -> btree_map::Iter<PathBuf, Result<PathBuf>> {
+    pub fn iter(&self) -> btree_map::Iter<'_, PathBuf, Result<PathBuf>> {
         self.items.iter()
     }
 

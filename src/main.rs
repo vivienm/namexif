@@ -76,15 +76,17 @@ fn prompt_confirm(
     loop {
         print!("{} [{}] ", message, if default { "Yn" } else { "yN" });
         stdout.flush()?;
-        stdin.read_line(&mut input)?;
-        {
-            let input = input.trim_end();
-            match input {
-                "" => return Ok(default),
-                "y" | "Y" => return Ok(true),
-                "n" | "N" => return Ok(false),
-                _ => eprintln!("Invalid input: {}", input),
-            }
+        if stdin.read_line(&mut input)? == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "stdin closed before confirmation",
+            ));
+        }
+        match input.trim_end() {
+            "" => return Ok(default),
+            "y" | "Y" => return Ok(true),
+            "n" | "N" => return Ok(false),
+            other => eprintln!("Invalid input: {}", other),
         }
         input.clear();
     }

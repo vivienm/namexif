@@ -45,7 +45,7 @@ pub struct Args {
 
 #[inline]
 fn pluralize(value: usize) -> &'static str {
-    if value >= 2 { "s" } else { "" }
+    if value == 1 { "" } else { "s" }
 }
 
 #[derive(Debug, From, Error)]

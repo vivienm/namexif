@@ -1,6 +1,6 @@
 use std::{fs::File, io, path::Path, result};
 
-use chrono::{offset::LocalResult, DateTime, NaiveDate, NaiveDateTime, TimeZone};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, offset::LocalResult};
 use derive_more::{Display, Error, From};
 
 #[derive(Debug, Display, Error)]

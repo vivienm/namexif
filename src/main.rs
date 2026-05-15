@@ -4,7 +4,7 @@ mod rename;
 use std::{
     fmt, fs,
     io::{self, Write},
-    path::{Component, Path, PathBuf, MAIN_SEPARATOR},
+    path::{Component, MAIN_SEPARATOR, Path, PathBuf},
     process, result,
 };
 
@@ -45,11 +45,7 @@ pub struct Args {
 
 #[inline]
 fn pluralize(value: usize) -> &'static str {
-    if value >= 2 {
-        "s"
-    } else {
-        ""
-    }
+    if value >= 2 { "s" } else { "" }
 }
 
 #[derive(Debug, From, Error)]
@@ -206,14 +202,13 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
     Ok((renamed, errors))
 }
 
-fn generate_completions(shell: clap_complete::Shell) -> ! {
+fn generate_completions(shell: clap_complete::Shell) {
     clap_complete::generate(
         shell,
         &mut <Args as clap::CommandFactory>::command(),
         clap::crate_name!(),
         &mut std::io::stdout(),
     );
-    std::process::exit(0);
 }
 
 fn setup_logging(log_level: tracing::level_filters::LevelFilter) -> anyhow::Result<()> {
@@ -229,6 +224,7 @@ fn main() -> anyhow::Result<()> {
     let args = <Args as clap::Parser>::parse();
     if let Some(shell) = args.completion {
         generate_completions(shell);
+        return Ok(());
     }
     setup_logging(args.log_level)?;
 

@@ -1,8 +1,8 @@
 [package]
 name = "namexif"
 version = "0.1.0"
-edition = "2021"
-description = "Rename photos according to their EXIF date tag."
+edition = "2024"
+description = "Rename photos according to their EXIF date tag"
 repository = "https://github.com/vivienm/namexif"
 license = "MIT"
 publish = false

@@ -8,13 +8,17 @@ use std::{
     process, result,
 };
 
-use chrono_tz::Tz;
 use derive_more::{Error, From};
+use jiff::tz;
 
 #[cfg(windows)]
 const DEFAULT_NAME_FORMAT: &str = "%Y-%m-%dT%H%M%S%z";
 #[cfg(not(windows))]
 const DEFAULT_NAME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%z";
+
+fn parse_timezone(s: &str) -> result::Result<tz::TimeZone, String> {
+    tz::TimeZone::get(s).map_err(|err| err.to_string())
+}
 
 #[derive(Debug, clap::Parser)]
 #[clap(about)]
@@ -35,8 +39,13 @@ pub struct Args {
     )]
     pub name_format: String,
     /// Time zone
-    #[arg(short = 'z', long = "timezone", env = "NAMEXIF_TIMEZONE")]
-    pub timezone: Option<Tz>,
+    #[arg(
+        short = 'z',
+        long = "timezone",
+        env = "NAMEXIF_TIMEZONE",
+        value_parser = parse_timezone,
+    )]
+    pub timezone: Option<tz::TimeZone>,
     /// Generate the completion script for the specified shell.
     #[arg(long, exclusive = true, name = "SHELL")]
     completion: Option<clap_complete::Shell>,
@@ -98,10 +107,8 @@ fn prompt_confirm(
 }
 
 pub fn get_renames(args: &Args) -> io::Result<rename::Renames> {
-    match args.timezone {
-        None => rename::get_renames(&args.source_path, &chrono::Local, &args.name_format),
-        Some(timezone) => rename::get_renames(&args.source_path, &timezone, &args.name_format),
-    }
+    let timezone = args.timezone.clone().unwrap_or_else(tz::TimeZone::system);
+    rename::get_renames(&args.source_path, &timezone, &args.name_format)
 }
 
 pub fn common_ancestor<'a>(source_path: &'a Path, target_path: &'a Path) -> Option<&'a Path> {

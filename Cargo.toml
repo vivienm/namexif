@@ -9,11 +9,10 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-chrono = { version = "0.4.44", default-features = false, features = ["std", "clock"] }
-chrono-tz = "0.10.4"
 clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 clap_complete = "4.6.5"
 derive_more = { version = "2.1.1", features = ["display", "error", "from"] }
+jiff = "0.2.24"
 kamadak-exif = "0.6.1"
 rayon = "1.12.0"
 tracing = "0.1.44"

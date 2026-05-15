@@ -7,8 +7,8 @@ use std::{
     result,
 };
 
-use chrono::TimeZone;
 use derive_more::{Display, From};
+use jiff::tz;
 use rayon::iter::{FromParallelIterator, IntoParallelIterator, ParallelIterator};
 
 use crate::image;
@@ -162,25 +162,25 @@ fn get_target_extension(source_path: &Path) -> Result<&str> {
     }
 }
 
-fn get_target_file_stem<T>(source_path: &Path, timezone: &T, name_format: &str) -> Result<String>
-where
-    T: TimeZone,
-    T::Offset: fmt::Display,
-{
+fn get_target_file_stem(
+    source_path: &Path,
+    timezone: &tz::TimeZone,
+    name_format: &str,
+) -> Result<String> {
     if source_path.is_dir() {
         return Err(Error::Skip(SkipError::Directory));
     }
     let image = image::Image::open(source_path)?;
-    let datetime = image.get_datetime(timezone)?;
-    let file_stem = datetime.format(name_format).to_string();
+    let zoned = image.get_zoned(timezone)?;
+    let file_stem = zoned.strftime(name_format).to_string();
     Ok(file_stem)
 }
 
-fn get_target_name<T>(source_path: &Path, timezone: &T, name_format: &str) -> Result<OsString>
-where
-    T: TimeZone,
-    T::Offset: fmt::Display,
-{
+fn get_target_name(
+    source_path: &Path,
+    timezone: &tz::TimeZone,
+    name_format: &str,
+) -> Result<OsString> {
     let target_extension = get_target_extension(source_path)?;
     let target_file_stem = get_target_file_stem(source_path, timezone, name_format)?;
     let mut target_name = target_file_stem;
@@ -189,11 +189,11 @@ where
     Ok(OsString::from(target_name))
 }
 
-fn get_target_path<T>(source_path: &Path, timezone: &T, name_format: &str) -> Result<PathBuf>
-where
-    T: TimeZone,
-    T::Offset: fmt::Display,
-{
+fn get_target_path(
+    source_path: &Path,
+    timezone: &tz::TimeZone,
+    name_format: &str,
+) -> Result<PathBuf> {
     let target_name = get_target_name(source_path, timezone, name_format)?;
     let parent_path = source_path.parent().ok_or(Error::NoParent)?;
     let target_path = parent_path.join(target_name);
@@ -217,11 +217,11 @@ fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
-pub fn get_renames<T>(source_path: &Path, timezone: &T, name_format: &str) -> io::Result<Renames>
-where
-    T: TimeZone + Sync,
-    T::Offset: fmt::Display,
-{
+pub fn get_renames(
+    source_path: &Path,
+    timezone: &tz::TimeZone,
+    name_format: &str,
+) -> io::Result<Renames> {
     let source_paths = get_source_paths(source_path)?;
     let items = source_paths.into_par_iter().map(|source_path| {
         let target_path = get_target_path(&source_path, timezone, name_format);

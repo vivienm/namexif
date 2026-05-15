@@ -1,7 +1,7 @@
 use std::{fs::File, io, path::Path, result};
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeZone, offset::LocalResult};
 use derive_more::{Display, Error, From};
+use jiff::{civil, tz};
 
 #[derive(Debug, Display, Error)]
 pub enum TagError {
@@ -11,20 +11,13 @@ pub enum TagError {
     Invalid,
 }
 
-#[derive(Debug, Display, Error)]
-pub enum DateError {
-    #[display("Invalid local date")]
-    InvalidLocalDatetime,
-    #[display("Ambiguous local date")]
-    AmbiguousLocalDatetime,
-}
-
 #[derive(Debug, Error, Display, From)]
 pub enum Error {
     Io(io::Error),
     Exif(exif::Error),
     Tag(TagError),
-    Date(DateError),
+    #[display("Invalid local date in time zone")]
+    InvalidLocalDatetime,
     #[display("Date or time out of range")]
     OutOfRange,
 }
@@ -63,27 +56,29 @@ impl Image {
         }
     }
 
-    fn get_naive_datetime_with(&self, tag: exif::Tag) -> Result<NaiveDateTime> {
+    fn get_civil_datetime_with(&self, tag: exif::Tag) -> Result<civil::DateTime> {
         let edt = self.get_exif_datetime_with(tag)?;
-        let date = NaiveDate::from_ymd_opt(edt.year.into(), edt.month.into(), edt.day.into())
-            .ok_or(Error::OutOfRange)?;
-        date.and_hms_opt(edt.hour.into(), edt.minute.into(), edt.second.into())
-            .ok_or(Error::OutOfRange)
+        let year = i16::try_from(edt.year).map_err(|_| Error::OutOfRange)?;
+        civil::DateTime::new(
+            year,
+            edt.month as i8,
+            edt.day as i8,
+            edt.hour as i8,
+            edt.minute as i8,
+            edt.second as i8,
+            0,
+        )
+        .map_err(|_| Error::OutOfRange)
     }
 
-    pub fn get_naive_datetime(&self) -> Result<NaiveDateTime> {
-        self.get_naive_datetime_with(exif::Tag::DateTimeOriginal)
+    pub fn get_civil_datetime(&self) -> Result<civil::DateTime> {
+        self.get_civil_datetime_with(exif::Tag::DateTimeOriginal)
     }
 
-    pub fn get_datetime<T>(&self, timezone: &T) -> Result<DateTime<T>>
-    where
-        T: TimeZone,
-    {
-        let naive_datetime = self.get_naive_datetime()?;
-        match timezone.from_local_datetime(&naive_datetime) {
-            LocalResult::None => Err(Error::Date(DateError::InvalidLocalDatetime)),
-            LocalResult::Single(datetime) => Ok(datetime),
-            LocalResult::Ambiguous(..) => Err(Error::Date(DateError::AmbiguousLocalDatetime)),
-        }
+    pub fn get_zoned(&self, timezone: &tz::TimeZone) -> Result<jiff::Zoned> {
+        let datetime = self.get_civil_datetime()?;
+        datetime
+            .to_zoned(timezone.clone())
+            .map_err(|_| Error::InvalidLocalDatetime)
     }
 }

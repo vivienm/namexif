@@ -36,6 +36,8 @@ impl error::Error for SkipError {}
 pub enum Error {
     Image(image::Error),
     Skip(SkipError),
+    #[display("Source path has no parent directory")]
+    NoParent,
 }
 
 impl error::Error for Error {}
@@ -189,7 +191,7 @@ where
     T::Offset: fmt::Display,
 {
     let target_name = get_target_name(source_path, timezone, name_format)?;
-    let parent_path = source_path.parent().unwrap();
+    let parent_path = source_path.parent().ok_or(Error::NoParent)?;
     let target_path = parent_path.join(target_name);
     if source_path == target_path {
         return Err(Error::Skip(SkipError::WellNamed));

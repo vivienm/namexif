@@ -11,6 +11,11 @@ use std::{
 use chrono_tz::Tz;
 use derive_more::{Error, From};
 
+#[cfg(windows)]
+const DEFAULT_NAME_FORMAT: &str = "%Y-%m-%dT%H%M%S%z";
+#[cfg(not(windows))]
+const DEFAULT_NAME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%z";
+
 #[derive(Debug, clap::Parser)]
 #[clap(about)]
 pub struct Args {
@@ -26,7 +31,7 @@ pub struct Args {
         long = "format",
         value_name = "format",
         env = "NAMEXIF_FORMAT",
-        default_value = "%Y-%m-%dT%H:%M:%S%z"
+        default_value = DEFAULT_NAME_FORMAT
     )]
     pub name_format: String,
     /// Time zone

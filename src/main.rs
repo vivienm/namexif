@@ -22,13 +22,13 @@ fn parse_timezone(s: &str) -> result::Result<tz::TimeZone, String> {
 
 #[derive(Debug, clap::Parser)]
 #[clap(about)]
-pub struct Args {
+struct Args {
     /// Does not prompt for confirmation
     #[arg(short = 'y', long = "assume-yes")]
-    pub assume_yes: bool,
+    assume_yes: bool,
     /// Does not actually rename files
     #[arg(short = 'n', long = "dry-run")]
-    pub dry_run: bool,
+    dry_run: bool,
     /// Filename format
     #[arg(
         short = 'f',
@@ -37,7 +37,7 @@ pub struct Args {
         env = "NAMEXIF_FORMAT",
         default_value = DEFAULT_NAME_FORMAT
     )]
-    pub name_format: String,
+    name_format: String,
     /// Time zone
     #[arg(
         short = 'z',
@@ -45,13 +45,13 @@ pub struct Args {
         env = "NAMEXIF_TIMEZONE",
         value_parser = parse_timezone,
     )]
-    pub timezone: Option<tz::TimeZone>,
+    timezone: Option<tz::TimeZone>,
     /// Generate the completion script for the specified shell.
     #[arg(long, exclusive = true, name = "SHELL")]
     completion: Option<clap_complete::Shell>,
     /// Input file or directory
     #[arg(value_name = "input", default_value = ".")]
-    pub source_path: PathBuf,
+    source_path: PathBuf,
     /// Set the verbosity level for log messages.
     #[arg(global = true, long, default_value = "info", env = "NAMEXIF_LOG_LEVEL")]
     log_level: tracing::level_filters::LevelFilter,
@@ -63,7 +63,7 @@ fn pluralize(value: usize) -> &'static str {
 }
 
 #[derive(Debug, From, Error)]
-pub enum Error {
+enum Error {
     Io(io::Error),
     #[error(ignore)]
     Conflicts(usize),
@@ -78,7 +78,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub type Result<T> = result::Result<T, Error>;
+type Result<T> = result::Result<T, Error>;
 
 fn prompt_confirm(
     stdin: &io::Stdin,
@@ -106,12 +106,12 @@ fn prompt_confirm(
     }
 }
 
-pub fn get_renames(args: &Args) -> io::Result<rename::Renames> {
+fn get_renames(args: &Args) -> io::Result<rename::Renames> {
     let timezone = args.timezone.clone().unwrap_or_else(tz::TimeZone::system);
     rename::get_renames(&args.source_path, &timezone, &args.name_format)
 }
 
-pub fn common_ancestor<'a>(source_path: &'a Path, target_path: &'a Path) -> Option<&'a Path> {
+fn common_ancestor<'a>(source_path: &'a Path, target_path: &'a Path) -> Option<&'a Path> {
     source_path
         .ancestors()
         .find(|&ancestor| target_path.starts_with(ancestor))

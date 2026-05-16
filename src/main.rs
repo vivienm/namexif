@@ -100,7 +100,7 @@ fn prompt_confirm(
             "" => return Ok(default),
             "y" | "Y" => return Ok(true),
             "n" | "N" => return Ok(false),
-            other => eprintln!("Invalid input: {}", other),
+            other => eprintln!("Invalid input: {other}"),
         }
         input.clear();
     }
@@ -135,7 +135,7 @@ where
             ancestor_empty = false;
             match component {
                 Component::ParentDir | Component::Normal(_) => {
-                    write!(f, "{}", MAIN_SEPARATOR)?;
+                    write!(f, "{MAIN_SEPARATOR}")?;
                 }
                 _ => {}
             }
@@ -207,7 +207,7 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
                     );
                     errors += 1;
                 }
-                Ok(_) => {
+                Ok(()) => {
                     renamed += 1;
                 }
             }

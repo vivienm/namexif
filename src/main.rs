@@ -165,7 +165,7 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
             Err(rename::Error::Skip(err)) => {
                 tracing::info!("Skipping file {}: {}", source_path.display(), err);
             }
-            Err(err @ rename::Error::Image(_)) | Err(err @ rename::Error::NoParent) => {
+            Err(err @ (rename::Error::Image(_) | rename::Error::NoParent)) => {
                 tracing::error!("Skipping file {}: {}", source_path.display(), err);
                 errors += 1;
             }

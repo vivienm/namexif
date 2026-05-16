@@ -48,6 +48,7 @@ type Result<T> = result::Result<T, Error>;
 pub enum Side {
     Source,
     Target,
+    Existing,
 }
 
 #[derive(Debug)]
@@ -62,10 +63,11 @@ impl fmt::Display for Conflict<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{} file {} is overwritten",
+            "{} file {} would be overwritten",
             match self.side {
                 Side::Source => "Source",
                 Side::Target => "Target",
+                Side::Existing => "Existing",
             },
             self.path.display(),
         )
@@ -74,6 +76,7 @@ impl fmt::Display for Conflict<'_> {
 
 pub struct Conflicts<'a> {
     items: btree_map::Iter<'a, PathBuf, Result<PathBuf>>,
+    source_paths: &'a btree_map::BTreeMap<PathBuf, Result<PathBuf>>,
     target_paths: hash_set::HashSet<&'a Path>,
 }
 
@@ -85,7 +88,7 @@ impl<'a> Iterator for Conflicts<'a> {
             let (source_path, target_path) = self.items.next()?;
             if let Ok(target_path) = target_path {
                 let source_path = source_path.as_ref();
-                let target_path = target_path.as_ref();
+                let target_path: &Path = target_path.as_ref();
                 let conflict = if self.target_paths.contains(source_path) {
                     Some(Conflict {
                         side: Side::Source,
@@ -94,6 +97,13 @@ impl<'a> Iterator for Conflicts<'a> {
                 } else if self.target_paths.contains(target_path) {
                     Some(Conflict {
                         side: Side::Target,
+                        path: target_path,
+                    })
+                } else if !self.source_paths.contains_key(target_path)
+                    && target_path.try_exists().unwrap_or(false)
+                {
+                    Some(Conflict {
+                        side: Side::Existing,
                         path: target_path,
                     })
                 } else {
@@ -116,6 +126,7 @@ impl Renames {
     pub fn conflicts(&self) -> Conflicts<'_> {
         Conflicts {
             items: self.iter(),
+            source_paths: &self.items,
             target_paths: hash_set::HashSet::with_capacity(self.items.len()),
         }
     }

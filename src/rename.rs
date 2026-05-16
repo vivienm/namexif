@@ -101,6 +101,7 @@ impl<'a> Iterator for Conflicts<'a> {
                     })
                 } else if !self.source_paths.contains_key(target_path)
                     && target_path.try_exists().unwrap_or(false)
+                    && !same_file::is_same_file(source_path, target_path).unwrap_or(false)
                 {
                     Some(Conflict {
                         side: Side::Existing,

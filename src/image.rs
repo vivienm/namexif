@@ -58,14 +58,14 @@ impl Image {
 
     fn get_civil_datetime_with(&self, tag: exif::Tag) -> Result<civil::DateTime> {
         let edt = self.get_exif_datetime_with(tag)?;
-        let year = i16::try_from(edt.year).map_err(|_| Error::OutOfRange)?;
+        let to_i8 = |v: u8| i8::try_from(v).map_err(|_| Error::OutOfRange);
         civil::DateTime::new(
-            year,
-            edt.month as i8,
-            edt.day as i8,
-            edt.hour as i8,
-            edt.minute as i8,
-            edt.second as i8,
+            i16::try_from(edt.year).map_err(|_| Error::OutOfRange)?,
+            to_i8(edt.month)?,
+            to_i8(edt.day)?,
+            to_i8(edt.hour)?,
+            to_i8(edt.minute)?,
+            to_i8(edt.second)?,
             0,
         )
         .map_err(|_| Error::OutOfRange)

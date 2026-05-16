@@ -24,7 +24,7 @@ impl fmt::Display for SkipError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SkipError::Directory => write!(f, "Is a directory"),
-            SkipError::Extension => write!(f, "Not an EXIF file"),
+            SkipError::Extension => write!(f, "Unsupported file format"),
             SkipError::WellNamed => write!(f, "Does not need renaming"),
         }
     }
@@ -156,18 +156,16 @@ impl IntoIterator for Renames {
 }
 
 const JPEG_CANONICAL_EXTENSION: &str = "jpg";
-const JPEG_EXTENSIONS: [&str; 4] = [JPEG_CANONICAL_EXTENSION, "JPG", "jpeg", "JPEG"];
 const TIFF_CANONICAL_EXTENSION: &str = "tiff";
-const TIFF_EXTENSIONS: [&str; 4] = [TIFF_CANONICAL_EXTENSION, "tif", "TIF", "TIFF"];
 
 fn get_target_extension(source_path: &Path) -> Result<&str> {
-    let source_extension = source_path
+    let ext = source_path
         .extension()
         .and_then(OsStr::to_str)
         .ok_or(Error::Skip(SkipError::Extension))?;
-    if JPEG_EXTENSIONS.contains(&source_extension) {
+    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
         Ok(JPEG_CANONICAL_EXTENSION)
-    } else if TIFF_EXTENSIONS.contains(&source_extension) {
+    } else if ext.eq_ignore_ascii_case("tif") || ext.eq_ignore_ascii_case("tiff") {
         Ok(TIFF_CANONICAL_EXTENSION)
     } else {
         Err(Error::Skip(SkipError::Extension))

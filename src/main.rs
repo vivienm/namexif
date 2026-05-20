@@ -2,9 +2,9 @@ mod image;
 mod rename;
 
 use std::{
-    fmt, fs,
+    fmt,
     io::{self, Write},
-    path::{Component, MAIN_SEPARATOR, Path, PathBuf},
+    path::PathBuf,
     process, result,
 };
 
@@ -65,6 +65,7 @@ fn pluralize(value: usize) -> &'static str {
 #[derive(Debug, From, Error)]
 enum Error {
     Io(io::Error),
+    Plan(nominal::PlanError),
     #[error(ignore)]
     Conflicts(usize),
 }
@@ -73,6 +74,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Io(err) => err.fmt(f),
+            Error::Plan(err) => err.fmt(f),
             Error::Conflicts(n) => write!(f, "{} conflicting file{}", n, pluralize(*n)),
         }
     }
@@ -80,136 +82,63 @@ impl fmt::Display for Error {
 
 type Result<T> = result::Result<T, Error>;
 
-fn prompt_confirm(
-    stdin: &io::Stdin,
-    stdout: &mut io::Stdout,
-    message: &str,
-    default: bool,
-) -> io::Result<bool> {
-    let mut input = String::new();
-    loop {
-        print!("{} [{}] ", message, if default { "Yn" } else { "yN" });
-        stdout.flush()?;
-        if stdin.read_line(&mut input)? == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "stdin closed before confirmation",
-            ));
-        }
-        match input.trim_end() {
-            "" => return Ok(default),
-            "y" | "Y" => return Ok(true),
-            "n" | "N" => return Ok(false),
-            other => eprintln!("Invalid input: {other}"),
-        }
-        input.clear();
-    }
-}
-
-fn get_renames(args: &Args) -> io::Result<rename::Renames> {
-    let timezone = args.timezone.clone().unwrap_or_else(tz::TimeZone::system);
-    rename::get_renames(&args.source_path, &timezone, &args.name_format)
-}
-
-fn common_ancestor<'a>(source_path: &'a Path, target_path: &'a Path) -> Option<&'a Path> {
-    source_path
-        .ancestors()
-        .find(|&ancestor| target_path.starts_with(ancestor))
-}
-
-fn write_rename<W>(f: &mut W, source_path: &Path, target_path: &Path) -> io::Result<()>
-where
-    W: io::Write,
-{
-    let mut source_path = source_path;
-    let mut target_path = target_path;
-    let mut ancestor_empty = true;
-    if let Some(ancestor_path) = common_ancestor(source_path, target_path) {
-        source_path = source_path.strip_prefix(ancestor_path).unwrap();
-        target_path = target_path.strip_prefix(ancestor_path).unwrap();
-        for component in ancestor_path.components() {
-            if let Component::CurDir = component {
-                continue;
-            }
-            write!(f, "{}", component.as_os_str().to_string_lossy())?;
-            ancestor_empty = false;
-            match component {
-                Component::ParentDir | Component::Normal(_) => {
-                    write!(f, "{MAIN_SEPARATOR}")?;
-                }
-                _ => {}
-            }
-        }
-    }
-    writeln!(
-        f,
-        "{}{} => {}{}",
-        if ancestor_empty { "" } else { "{" },
-        source_path.display(),
-        target_path.display(),
-        if ancestor_empty { "" } else { "}" },
-    )?;
-    Ok(())
-}
-
 fn try_run(args: &Args) -> Result<(usize, usize)> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    let renames = get_renames(args)?;
+    let timezone = args.timezone.clone().unwrap_or_else(tz::TimeZone::system);
+    let renames = rename::get_renames(&args.source_path, &timezone, &args.name_format)?;
 
-    // Look for errors and retrieve paths.
-    let mut paths: Vec<(&Path, &Path)> = Vec::with_capacity(renames.len());
+    // Filter classified errors out before handing the plan to nominal: skips
+    // are info, image / no-parent errors are real failures we count.
     let mut errors = 0;
-    for (source_path, target_path) in renames.iter() {
-        match target_path {
+    let pairs = renames
+        .into_iter()
+        .filter_map(|(source_path, target_path)| match target_path {
             Err(rename::Error::Skip(err)) => {
                 tracing::info!("Skipping file {}: {}", source_path.display(), err);
+                None
             }
             Err(err @ (rename::Error::Image(_) | rename::Error::NoParent)) => {
                 tracing::error!("Skipping file {}: {}", source_path.display(), err);
                 errors += 1;
+                None
             }
-            Ok(target_path) => {
-                paths.push((source_path, target_path));
-            }
-        }
-    }
+            Ok(target_path) => Some((source_path, target_path)),
+        });
 
-    // Display paths.
-    for (source_path, target_path) in &paths {
-        write_rename(&mut stdout, source_path, target_path)?;
-    }
+    let mut plan = nominal::Renamer::from_iter(pairs).plan()?;
 
-    // Look for conflicts.
-    let mut conflicts = 0;
-    for conflict in renames.conflicts() {
+    // Surface targets that already exist on disk outside the batch. They are
+    // drained from the plan, so apply only sees safe renames.
+    let conflicts = plan.check_fs()?;
+    for conflict in &conflicts {
         tracing::error!("{}", conflict);
-        conflicts += 1;
     }
-    if conflicts > 0 {
-        return Err(Error::Conflicts(conflicts));
+    if !conflicts.is_empty() {
+        return Err(Error::Conflicts(conflicts.len()));
     }
 
-    // Rename files.
+    if plan.is_empty() {
+        return Ok((0, errors));
+    }
+
+    let ls_colors = lscolors::LsColors::from_env().unwrap_or_default();
+    let mut stdout = io::stdout();
+    plan.write_colored_to(&mut stdout, &ls_colors)?;
+    stdout.flush()?;
+
+    if args.dry_run {
+        return Ok((0, errors));
+    }
+    if !args.assume_yes && plan.confirm()? != Some(true) {
+        return Ok((0, errors));
+    }
+
     let mut renamed = 0;
-    if !paths.is_empty()
-        && !args.dry_run
-        && (args.assume_yes || prompt_confirm(&stdin, &mut stdout, "Proceed?", false)?)
-    {
-        for (source_path, target_path) in &paths {
-            match fs::rename(source_path, target_path) {
-                Err(err) => {
-                    tracing::error!(
-                        "Can't rename {} to {}: {}",
-                        source_path.display(),
-                        target_path.display(),
-                        err
-                    );
-                    errors += 1;
-                }
-                Ok(()) => {
-                    renamed += 1;
-                }
+    for result in plan.apply_iter() {
+        match result {
+            Ok(_) => renamed += 1,
+            Err(err) => {
+                tracing::error!("{}", err);
+                errors += 1;
             }
         }
     }

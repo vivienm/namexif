@@ -1,5 +1,4 @@
 use std::{
-    collections::{btree_map, hash_set},
     error,
     ffi::{OsStr, OsString},
     fmt, fs, io,
@@ -9,7 +8,7 @@ use std::{
 
 use derive_more::{Display, From};
 use jiff::tz;
-use rayon::iter::{FromParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::image;
 
@@ -43,113 +42,6 @@ pub enum Error {
 impl error::Error for Error {}
 
 type Result<T> = result::Result<T, Error>;
-
-#[derive(Debug)]
-pub enum Side {
-    Source,
-    Target,
-    Existing,
-}
-
-#[derive(Debug)]
-pub struct Conflict<'a> {
-    pub side: Side,
-    pub path: &'a Path,
-}
-
-impl error::Error for Conflict<'_> {}
-
-impl fmt::Display for Conflict<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{} file {} would be overwritten",
-            match self.side {
-                Side::Source => "Source",
-                Side::Target => "Target",
-                Side::Existing => "Existing",
-            },
-            self.path.display(),
-        )
-    }
-}
-
-pub struct Conflicts<'a> {
-    items: btree_map::Iter<'a, PathBuf, Result<PathBuf>>,
-    source_paths: &'a btree_map::BTreeMap<PathBuf, Result<PathBuf>>,
-    target_paths: hash_set::HashSet<&'a Path>,
-}
-
-impl<'a> Iterator for Conflicts<'a> {
-    type Item = Conflict<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let (source_path, target_path) = self.items.next()?;
-            if let Ok(target_path) = target_path {
-                let source_path = source_path.as_ref();
-                let target_path: &Path = target_path.as_ref();
-                let conflict = if self.target_paths.contains(source_path) {
-                    Some(Conflict {
-                        side: Side::Source,
-                        path: source_path,
-                    })
-                } else if self.target_paths.contains(target_path) {
-                    Some(Conflict {
-                        side: Side::Target,
-                        path: target_path,
-                    })
-                } else if !self.source_paths.contains_key(target_path)
-                    && target_path.try_exists().unwrap_or(false)
-                    && !same_file::is_same_file(source_path, target_path).unwrap_or(false)
-                {
-                    Some(Conflict {
-                        side: Side::Existing,
-                        path: target_path,
-                    })
-                } else {
-                    None
-                };
-                self.target_paths.insert(target_path);
-                if conflict.is_some() {
-                    return conflict;
-                }
-            }
-        }
-    }
-}
-
-pub struct Renames {
-    items: btree_map::BTreeMap<PathBuf, Result<PathBuf>>,
-}
-
-impl Renames {
-    pub fn conflicts(&self) -> Conflicts<'_> {
-        Conflicts {
-            items: self.iter(),
-            source_paths: &self.items,
-            target_paths: hash_set::HashSet::with_capacity(self.items.len()),
-        }
-    }
-
-    pub fn iter(&self) -> btree_map::Iter<'_, PathBuf, Result<PathBuf>> {
-        self.items.iter()
-    }
-
-    pub fn len(&self) -> usize {
-        self.items.len()
-    }
-}
-
-impl IntoIterator for Renames {
-    type Item = (PathBuf, Result<PathBuf>);
-
-    type IntoIter = btree_map::IntoIter<PathBuf, Result<PathBuf>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.items.into_iter()
-    }
-}
 
 const JPEG_CANONICAL_EXTENSION: &str = "jpg";
 const TIFF_CANONICAL_EXTENSION: &str = "tiff";
@@ -211,28 +103,25 @@ fn get_target_path(
 
 fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
     if source_path.is_file() {
-        let source_path = source_path.to_path_buf();
-        return Ok(vec![source_path]);
+        return Ok(vec![source_path.to_path_buf()]);
     }
     let read_dir = fs::read_dir(source_path)?;
-    let paths: io::Result<Vec<_>> = read_dir
+    read_dir
         .map(|result| result.map(|dir_entry| dir_entry.path()))
-        .collect();
-    let mut paths = paths?;
-    paths.sort();
-    Ok(paths)
+        .collect()
 }
 
 pub fn get_renames(
     source_path: &Path,
     timezone: &tz::TimeZone,
     name_format: &str,
-) -> io::Result<Renames> {
+) -> io::Result<Vec<(PathBuf, Result<PathBuf>)>> {
     let source_paths = get_source_paths(source_path)?;
-    let items = source_paths.into_par_iter().map(|source_path| {
-        let target_path = get_target_path(&source_path, timezone, name_format);
-        (source_path, target_path)
-    });
-    let items = btree_map::BTreeMap::from_par_iter(items);
-    Ok(Renames { items })
+    Ok(source_paths
+        .into_par_iter()
+        .map(|source_path| {
+            let target_path = get_target_path(&source_path, timezone, name_format);
+            (source_path, target_path)
+        })
+        .collect())
 }

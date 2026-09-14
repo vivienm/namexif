@@ -48,7 +48,7 @@ struct Args {
     )]
     timezone: Option<tz::TimeZone>,
     /// Generate the completion script for the specified shell.
-    #[arg(long, exclusive = true, name = "SHELL")]
+    #[arg(long, name = "SHELL")]
     completion: Option<clap_complete::Shell>,
     /// Input file or directory
     #[arg(value_name = "input", default_value = ".")]

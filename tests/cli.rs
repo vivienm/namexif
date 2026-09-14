@@ -54,6 +54,27 @@ fn assert_exit(output: &Output, code: i32) {
 }
 
 #[test]
+fn completions_work_with_environment_configuration_without_renaming() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input.tif");
+    let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+    for shell in ["bash", "elvish", "fish", "powershell", "zsh"] {
+        let output = command()
+            .env("NAMEXIF_TIMEZONE", "Europe/Paris")
+            .env("NAMEXIF_LOG_LEVEL", "debug")
+            .args(["--completion", shell])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(String::from_utf8_lossy(&output.stdout).contains("namexif"));
+        assert!(output.stderr.is_empty());
+        assert_eq!(fs::read(&source).unwrap(), bytes);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+}
+
+#[test]
 fn renames_a_photo_and_preserves_its_contents() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("input.tif");

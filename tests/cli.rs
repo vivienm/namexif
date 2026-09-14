@@ -446,6 +446,49 @@ mod symlink_dependencies {
     use std::os::unix::fs::symlink;
 
     #[test]
+    fn hard_linked_photos_preserve_links_to_their_backup_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input");
+        let backup = dir.path().join("backup");
+        fs::create_dir(&input).unwrap();
+        fs::create_dir(&backup).unwrap();
+        let mut originals = Vec::new();
+        for hour in 0..24 {
+            let name = format!("{hour}.tif");
+            let bytes = image(
+                &input.join(&name),
+                &[(
+                    Tag::DateTimeOriginal,
+                    &format!("2026:06:01 {hour:02}:34:56"),
+                )],
+            );
+            fs::hard_link(input.join(&name), backup.join(&name)).unwrap();
+            symlink(
+                format!("../backup/{name}"),
+                input.join(format!("{hour}.txt")),
+            )
+            .unwrap();
+            originals.push(bytes);
+        }
+        let output = command()
+            .args(["--timezone", "UTC"])
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        for (hour, bytes) in originals.iter().enumerate() {
+            assert!(!input.join(format!("{hour}.tif")).exists());
+            for path in [
+                input.join(format!("20260601T{hour:02}3456+0000.tiff")),
+                input.join(format!("{hour}.txt")),
+                backup.join(format!("{hour}.tif")),
+            ] {
+                assert_eq!(&fs::read(path).unwrap(), bytes);
+            }
+        }
+    }
+
+    #[test]
     fn links_to_renamed_photos_reject_the_entire_batch() {
         for link_name in ["alias.jpg", "alias.txt"] {
             for absolute in [false, true] {

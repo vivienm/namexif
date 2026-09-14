@@ -129,10 +129,11 @@ fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
 }
 
 fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Result<()> {
+    let mut resolver = entry::Resolver::default();
     let mut changing = HashSet::new();
     for (source, target) in renames {
         if target.is_ok() {
-            changing.extend(entry::keys(source, &fs::symlink_metadata(source)?)?);
+            changing.extend(resolver.keys(source, &fs::symlink_metadata(source)?)?);
         }
     }
     if changing.is_empty() {
@@ -160,7 +161,7 @@ fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Res
             if metadata.is_dir() || (visited.is_empty() && !metadata.is_symlink()) {
                 break;
             }
-            let entries = entry::keys(&path, &metadata)?;
+            let entries = resolver.keys(&path, &metadata)?;
             if !visited.is_empty() && entries.iter().any(|entry| changing.contains(entry)) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,

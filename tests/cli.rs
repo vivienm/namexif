@@ -162,6 +162,12 @@ fn exif_offsets_are_converted_to_the_output_timezone() {
         // The offset disambiguates the repeated hour at the end of DST.
         (
             "2026:10:25 02:30:00",
+            "+02:00",
+            "Europe/Paris",
+            "20261025T023000+0200.tiff",
+        ),
+        (
+            "2026:10:25 02:30:00",
             "+01:00",
             "Europe/Paris",
             "20261025T023000+0100.tiff",
@@ -322,5 +328,58 @@ fn malformed_optional_date_tags_are_reported_without_renaming() {
         assert_exit(&output, 1);
         assert_eq!(fs::read(source).unwrap(), bytes);
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+}
+
+#[test]
+fn skipped_and_repeated_local_hours_require_an_exif_offset() {
+    for date in ["2026:03:29 02:30:00", "2026:10:25 02:30:00"] {
+        for offset in [None, Some("   :  "), Some("      ")] {
+            for dry_run in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let source = dir.path().join("input.tif");
+                let mut tags = vec![(Tag::DateTimeOriginal, date)];
+                if let Some(offset) = offset {
+                    tags.push((Tag::OffsetTimeOriginal, offset));
+                }
+                let bytes = image(&source, &tags);
+                let mut cmd = command();
+                cmd.args(["--timezone", "Europe/Paris"]).arg(&source);
+                if dry_run {
+                    cmd.arg("--dry-run");
+                }
+                let output = cmd.output().unwrap();
+                assert_exit(&output, 1);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(
+                    stderr.contains("Invalid or ambiguous local date"),
+                    "{stderr}"
+                );
+                assert_eq!(fs::read(source).unwrap(), bytes);
+                assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn unambiguous_hours_around_clock_changes_are_preserved() {
+    for (date, target) in [
+        ("2026:03:29 01:59:59", "20260329T015959+0100.tiff"),
+        ("2026:03:29 03:00:00", "20260329T030000+0200.tiff"),
+        ("2026:10:25 01:59:59", "20261025T015959+0200.tiff"),
+        ("2026:10:25 03:00:00", "20261025T030000+0100.tiff"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input.tif");
+        let bytes = image(&source, &[(Tag::DateTimeOriginal, date)]);
+        let output = command()
+            .args(["--timezone", "Europe/Paris"])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(!source.exists());
+        assert_eq!(fs::read(dir.path().join(target)).unwrap(), bytes);
     }
 }

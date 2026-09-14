@@ -16,8 +16,8 @@ pub enum Error {
     Io(io::Error),
     Exif(exif::Error),
     Tag(TagError),
-    #[display("Invalid local date in time zone")]
-    InvalidLocalDatetime,
+    #[display("Invalid or ambiguous local date in time zone: {_0}")]
+    InvalidLocalDatetime(jiff::Error),
     #[display("Date or time out of range")]
     OutOfRange,
 }
@@ -96,8 +96,9 @@ impl Image {
                 .map_err(|_| Error::OutOfRange)?;
             return Ok(timestamp.to_zoned(timezone.clone()));
         }
-        datetime
-            .to_zoned(timezone.clone())
-            .map_err(|_| Error::InvalidLocalDatetime)
+        timezone
+            .to_ambiguous_zoned(datetime)
+            .unambiguous()
+            .map_err(Error::InvalidLocalDatetime)
     }
 }

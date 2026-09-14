@@ -132,8 +132,21 @@ fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Res
     let mut resolver = entry::Resolver::default();
     let mut changing = HashSet::new();
     for (source, target) in renames {
-        if target.is_ok() {
-            changing.extend(resolver.keys(source, &fs::symlink_metadata(source)?)?);
+        if let Ok(target) = target {
+            let source_entries = resolver.keys(source, &fs::symlink_metadata(source)?)?;
+            // A spelling change on an insensitive filesystem preserves links.
+            // Require an unambiguous entry match, never just a shared inode or
+            // a case-insensitive string comparison.
+            let preserves_entry = match fs::symlink_metadata(target) {
+                Ok(metadata) => {
+                    source_entries.len() == 1 && resolver.keys(target, &metadata)? == source_entries
+                }
+                Err(err) if err.kind() == io::ErrorKind::NotFound => false,
+                Err(err) => return Err(err),
+            };
+            if !preserves_entry {
+                changing.extend(source_entries);
+            }
         }
     }
     if changing.is_empty() {

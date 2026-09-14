@@ -622,6 +622,92 @@ mod case_aliases {
     }
 
     #[test]
+    fn case_only_renames_preserve_symlink_dependencies() {
+        #[cfg(unix)]
+        let intermediate_links = [false, true];
+        // nominal conservatively rejects existing symlink targets on Windows.
+        #[cfg(windows)]
+        let intermediate_links = [false];
+        for intermediate_link in intermediate_links {
+            for dry_run in [false, true] {
+                let Some(dir) = insensitive_dir() else { return };
+                let input = dir.path().join("input");
+                fs::create_dir(&input).unwrap();
+                let original = dir.path().join("original.tif");
+                let bytes = image(&original, &[(Tag::DateTimeOriginal, DATE)]);
+                let source_name = "20260601T123456+0000.TIFF";
+                let source = input.join(source_name);
+                if intermediate_link {
+                    symlink("../original.tif", &source).unwrap();
+                } else {
+                    fs::write(&source, &bytes).unwrap();
+                }
+                symlink(source_name, input.join("middle.txt")).unwrap();
+                symlink("middle.txt", input.join("alias.txt")).unwrap();
+                // Also exercise dependency checking with a genuinely vacated name.
+                let other = input.join("other.tif");
+                let other_bytes = image(&other, &[(Tag::DateTimeOriginal, "2026:06:02 12:34:56")]);
+                let mut cmd = command();
+                cmd.args(["--timezone", "UTC"]).arg(&input);
+                if dry_run {
+                    cmd.arg("--dry-run");
+                }
+                let output = cmd.output().unwrap();
+                assert_exit(&output, 0);
+                assert_eq!(fs::read(input.join("alias.txt")).unwrap(), bytes);
+                assert_eq!(
+                    fs::read_link(input.join("middle.txt")).unwrap(),
+                    Path::new(source_name)
+                );
+                if intermediate_link {
+                    assert_eq!(
+                        fs::read_link(&source).unwrap(),
+                        Path::new("../original.tif")
+                    );
+                }
+                let stored_names: Vec<_> = fs::read_dir(&input)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().file_name())
+                    .collect();
+                let expected_name = if dry_run { source_name } else { TARGET };
+                assert!(stored_names.iter().any(|name| name == expected_name));
+                let other_target = if dry_run {
+                    "other.tif"
+                } else {
+                    "20260602T123456+0000.tiff"
+                };
+                assert_eq!(fs::read(input.join(other_target)).unwrap(), other_bytes);
+                assert_eq!(stored_names.len(), 4);
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn case_only_renames_still_reject_broken_links_on_sensitive_filesystems() {
+        for dry_run in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let source_name = "20260601T123456+0000.TIFF";
+            let source = dir.path().join(source_name);
+            let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+            if dir.path().join(TARGET).exists() {
+                return; // This filesystem ignores case.
+            }
+            symlink(source_name, dir.path().join("alias.txt")).unwrap();
+            let mut cmd = command();
+            cmd.args(["--timezone", "UTC"]).arg(dir.path());
+            if dry_run {
+                cmd.arg("--dry-run");
+            }
+            let output = cmd.output().unwrap();
+            assert_exit(&output, 2);
+            assert!(String::from_utf8_lossy(&output.stderr).contains("would break symbolic link"));
+            assert_eq!(fs::read(dir.path().join("alias.txt")).unwrap(), bytes);
+            assert!(!dir.path().join(TARGET).exists());
+        }
+    }
+
+    #[test]
     fn differently_cased_referents_reject_the_entire_batch() {
         for intermediate_link in [false, true] {
             for hard_link in [false, true] {

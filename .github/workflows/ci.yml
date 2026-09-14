@@ -38,6 +38,18 @@ jobs:
             target/
           key: "${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}"
           restore-keys: "${{ runner.os }}-cargo-"
+      - name: "Prepare case-insensitive test directory"
+        run: |
+          image="${{ runner.temp }}/casefold.img"
+          mountpoint="${{ runner.temp }}/casefold"
+          truncate -s 64M "$image"
+          mkfs.ext4 -q -O casefold "$image"
+          mkdir "$mountpoint"
+          sudo mount -o loop "$image" "$mountpoint"
+          sudo mkdir "$mountpoint/tests"
+          sudo chown "$(id -u):$(id -g)" "$mountpoint/tests"
+          chattr +F "$mountpoint/tests"
+          echo "NAMEXIF_CASE_INSENSITIVE_DIR=$mountpoint/tests" >> "$GITHUB_ENV"
       - name: "Run Just"
         run: "just ci"
         env:
@@ -45,3 +57,10 @@ jobs:
           SCCACHE_GHA_ENABLED: "true"
           RUSTFLAGS: "-D warnings"
           RUSTDOCFLAGS: "-D warnings"
+      - name: "Unmount test filesystem"
+        if: always()
+        run: |
+          mountpoint="${{ runner.temp }}/casefold"
+          if mountpoint -q "$mountpoint"; then
+            sudo umount "$mountpoint"
+          fi

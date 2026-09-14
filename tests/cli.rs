@@ -533,6 +533,104 @@ mod symlink_dependencies {
     }
 }
 
+#[cfg(any(unix, windows))]
+mod case_aliases {
+    use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+    #[cfg(windows)]
+    use std::os::windows::fs::symlink_file as symlink;
+
+    // Set this to an insensitive filesystem to require these regressions to run.
+    fn insensitive_dir() -> Option<tempfile::TempDir> {
+        let configured = std::env::var_os("NAMEXIF_CASE_INSENSITIVE_DIR");
+        let dir = match &configured {
+            Some(root) => tempfile::tempdir_in(root).unwrap(),
+            None => tempfile::tempdir().unwrap(),
+        };
+        fs::write(dir.path().join("probe"), "probe").unwrap();
+        let insensitive = dir.path().join("PROBE").exists();
+        if configured.is_some() {
+            assert!(insensitive, "NAMEXIF_CASE_INSENSITIVE_DIR must ignore case");
+        }
+        fs::remove_file(dir.path().join("probe")).unwrap();
+        insensitive.then_some(dir)
+    }
+
+    #[test]
+    fn differently_cased_referents_reject_the_entire_batch() {
+        for intermediate_link in [false, true] {
+            for hard_link in [false, true] {
+                for dry_run in [false, true] {
+                    let Some(dir) = insensitive_dir() else { return };
+                    let input = dir.path().join("Photos");
+                    fs::create_dir(&input).unwrap();
+                    let original = dir.path().join("original.tif");
+                    let bytes = image(&original, &[(Tag::DateTimeOriginal, DATE)]);
+                    let source = input.join("Photo.TIF");
+                    if intermediate_link {
+                        symlink("../original.tif", &source).unwrap();
+                    } else {
+                        fs::write(&source, &bytes).unwrap();
+                    }
+                    if hard_link {
+                        fs::hard_link(&source, input.join("other.txt")).unwrap();
+                    }
+                    // Exercise aliases of both the parent and final entry.
+                    let referent = "../PHOTOS/photo.tif";
+                    symlink(referent, input.join("alias.txt")).unwrap();
+                    let other = input.join("independent.tif");
+                    let other_bytes =
+                        image(&other, &[(Tag::DateTimeOriginal, "2026:06:02 12:34:56")]);
+                    let mut cmd = command();
+                    cmd.args(["--timezone", "UTC"]).arg(&input);
+                    if dry_run {
+                        cmd.arg("--dry-run");
+                    }
+                    let output = cmd.output().unwrap();
+                    assert_exit(&output, 2);
+                    assert!(
+                        String::from_utf8_lossy(&output.stderr)
+                            .contains("would break symbolic link")
+                    );
+                    assert_eq!(fs::read(&source).unwrap(), bytes);
+                    assert_eq!(fs::read(input.join("alias.txt")).unwrap(), bytes);
+                    assert_eq!(fs::read(&other).unwrap(), other_bytes);
+                    assert!(!input.join(TARGET).exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_link_to_a_separate_hard_link_remains_valid() {
+        // Run on the ordinary filesystem too, so inode-only matching fails in CI.
+        for insensitive in [false, true] {
+            let dir = if insensitive {
+                let Some(dir) = insensitive_dir() else {
+                    continue;
+                };
+                dir
+            } else {
+                tempfile::tempdir().unwrap()
+            };
+            let source = dir.path().join("Photo.TIF");
+            let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+            fs::hard_link(&source, dir.path().join("other.txt")).unwrap();
+            symlink("other.txt", dir.path().join("alias.txt")).unwrap();
+            let output = command()
+                .args(["--timezone", "UTC"])
+                .arg(dir.path())
+                .output()
+                .unwrap();
+            assert_exit(&output, 0);
+            assert!(!source.exists());
+            assert_eq!(fs::read(dir.path().join("alias.txt")).unwrap(), bytes);
+            assert_eq!(fs::read(dir.path().join(TARGET)).unwrap(), bytes);
+        }
+    }
+}
+
 #[cfg(unix)]
 mod special_files {
     use super::*;

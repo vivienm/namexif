@@ -22,6 +22,9 @@ If a rename would break a symbolic link found in the scanned directory, the
 entire batch is rejected, including in dry-run mode. Link chains and links with
 unsupported extensions are checked too. Links outside the scanned directory
 are not checked.
+Case aliases are checked on case-insensitive filesystems. On Unix, if an alias
+cannot be distinguished from several hard links in the same directory, the
+batch is conservatively rejected when any candidate is being renamed.
 
 ## Screenshot
 
@@ -34,3 +37,9 @@ You may install `namexif` locally by running
 ```console
 $ cargo install --git https://github.com/vivienm/namexif.git
 ```
+
+## Tests
+
+Run `cargo test`. To require the case-insensitive filesystem regressions to run,
+set `NAMEXIF_CASE_INSENSITIVE_DIR` to a writable directory on such a filesystem.
+CI runs these tests on an ext4 directory with casefold enabled.

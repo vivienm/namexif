@@ -1,3 +1,4 @@
+mod entry;
 mod image;
 mod rename;
 

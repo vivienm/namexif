@@ -11,7 +11,7 @@ use derive_more::{Display, From};
 use jiff::tz;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::image;
+use crate::{entry, image};
 
 #[derive(Debug)]
 pub enum SkipError {
@@ -128,25 +128,13 @@ fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
         .collect()
 }
 
-// Resolve directory aliases while retaining the final entry: canonicalizing
-// the whole path would hide dependencies on intermediate symlinks.
-fn entry_path(path: &Path) -> io::Result<PathBuf> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let name = path
-        .file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no filename"))?;
-    Ok(fs::canonicalize(parent)?.join(name))
-}
-
 fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Result<()> {
-    let changing: HashSet<_> = renames
-        .iter()
-        .filter(|(_, target)| target.is_ok())
-        .map(|(source, _)| entry_path(source))
-        .collect::<io::Result<_>>()?;
+    let mut changing = HashSet::new();
+    for (source, target) in renames {
+        if target.is_ok() {
+            changing.extend(entry::keys(source, &fs::symlink_metadata(source)?)?);
+        }
+    }
     if changing.is_empty() {
         return Ok(());
     }
@@ -172,18 +160,19 @@ fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Res
             if metadata.is_dir() || (visited.is_empty() && !metadata.is_symlink()) {
                 break;
             }
-            let entry = entry_path(&path)?;
-            if !visited.is_empty() && changing.contains(&entry) {
+            let entries = entry::keys(&path, &metadata)?;
+            if !visited.is_empty() && entries.iter().any(|entry| changing.contains(entry)) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!(
-                        "renaming {entry:?} would break symbolic link {source:?}; batch rejected"
+                        "renaming {path:?} would break symbolic link {source:?}; batch rejected"
                     ),
                 ));
             }
-            if !metadata.is_symlink() || !visited.insert(entry) {
+            if !metadata.is_symlink() || entries.iter().any(|entry| visited.contains(entry)) {
                 break;
             }
+            visited.extend(entries);
             let target = fs::read_link(&path)?;
             path = path.parent().unwrap_or(Path::new(".")).join(target);
         }

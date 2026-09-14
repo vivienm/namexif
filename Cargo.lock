@@ -516,6 +516,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+ "windows-sys",
 ]
 
 [[package]]

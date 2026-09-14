@@ -383,3 +383,123 @@ fn unambiguous_hours_around_clock_changes_are_preserved() {
         assert_eq!(fs::read(dir.path().join(target)).unwrap(), bytes);
     }
 }
+
+#[cfg(unix)]
+mod special_files {
+    use super::*;
+    use std::{
+        os::unix::{
+            fs::{FileTypeExt, symlink},
+            net::UnixListener,
+        },
+        process::Stdio,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    // A regression must fail the test instead of hanging the entire test suite.
+    fn output_with_timeout(command: &mut Command) -> Output {
+        let mut child = command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if child.try_wait().unwrap().is_some() {
+                return child.wait_with_output().unwrap();
+            }
+            if Instant::now() >= deadline {
+                child.kill().unwrap();
+                let output = child.wait_with_output().unwrap();
+                panic!("namexif blocked on a special file: {output:?}");
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn fifo(path: &Path) {
+        assert!(Command::new("mkfifo").arg(path).status().unwrap().success());
+    }
+
+    #[test]
+    fn special_files_do_not_block_directory_processing() {
+        for dry_run in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let pipe = dir.path().join("stream.jpg");
+            fifo(&pipe);
+            let socket = dir.path().join("socket.tiff");
+            let _listener = UnixListener::bind(&socket).unwrap();
+            let link = dir.path().join("link.jpeg");
+            symlink("stream.jpg", &link).unwrap();
+            let source = dir.path().join("input.tif");
+            let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+
+            let mut cmd = command();
+            cmd.args(["--timezone", "UTC"]).arg(dir.path());
+            if dry_run {
+                cmd.arg("--dry-run");
+            }
+            let output = output_with_timeout(&mut cmd);
+            assert_exit(&output, 0);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                stderr.matches("Is not a regular file").count(),
+                3,
+                "{stderr}"
+            );
+            assert!(fs::symlink_metadata(pipe).unwrap().file_type().is_fifo());
+            assert!(
+                fs::symlink_metadata(socket)
+                    .unwrap()
+                    .file_type()
+                    .is_socket()
+            );
+            assert_eq!(fs::read_link(link).unwrap(), Path::new("stream.jpg"));
+            if dry_run {
+                assert_eq!(fs::read(source).unwrap(), bytes);
+                assert!(!dir.path().join(TARGET).exists());
+            } else {
+                assert!(!source.exists());
+                assert_eq!(fs::read(dir.path().join(TARGET)).unwrap(), bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_special_file_inputs_are_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let pipe = dir.path().join("stream.jpg");
+        fifo(&pipe);
+        let socket = dir.path().join("socket.tiff");
+        let _listener = UnixListener::bind(&socket).unwrap();
+        let link = dir.path().join("link.jpeg");
+        symlink("stream.jpg", &link).unwrap();
+        for source in [&pipe, &socket, &link] {
+            let output = output_with_timeout(command().args(["--timezone", "UTC"]).arg(source));
+            assert_exit(&output, 0);
+            assert!(String::from_utf8_lossy(&output.stderr).contains("Is not a regular file"));
+            assert!(fs::symlink_metadata(source).is_ok());
+        }
+    }
+
+    #[test]
+    fn metadata_errors_are_reported_while_other_photos_are_renamed() {
+        let dir = tempfile::tempdir().unwrap();
+        let broken = dir.path().join("broken.jpg");
+        symlink("missing.jpg", &broken).unwrap();
+        let source = dir.path().join("input.tif");
+        let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+        let output = command()
+            .args(["--timezone", "UTC"])
+            .arg(dir.path())
+            .output()
+            .unwrap();
+        assert_exit(&output, 1);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("broken.jpg"), "{stderr}");
+        assert!(!stderr.contains("Is not a regular file"), "{stderr}");
+        assert_eq!(fs::read_link(broken).unwrap(), Path::new("missing.jpg"));
+        assert_eq!(fs::read(dir.path().join(TARGET)).unwrap(), bytes);
+    }
+}

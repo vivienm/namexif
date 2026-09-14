@@ -15,6 +15,7 @@ use crate::image;
 #[derive(Debug)]
 pub enum SkipError {
     Directory,
+    NotRegularFile,
     Extension,
     WellNamed,
 }
@@ -23,6 +24,7 @@ impl fmt::Display for SkipError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SkipError::Directory => write!(f, "Is a directory"),
+            SkipError::NotRegularFile => write!(f, "Is not a regular file"),
             SkipError::Extension => write!(f, "Unsupported file format"),
             SkipError::WellNamed => write!(f, "Does not need renaming"),
         }
@@ -33,6 +35,7 @@ impl error::Error for SkipError {}
 
 #[derive(Debug, Display, From)]
 pub enum Error {
+    Io(io::Error),
     Image(image::Error),
     #[display("Invalid filename format: {_0}")]
     Format(jiff::Error),
@@ -67,8 +70,14 @@ fn get_target_file_stem(
     timezone: &tz::TimeZone,
     name_format: &str,
 ) -> Result<String> {
-    if source_path.is_dir() {
+    // Follow symlinks to classify their referents, just as Image::open does.
+    // Unlike Path::is_file/is_dir, metadata preserves errors for the caller.
+    let metadata = fs::metadata(source_path)?;
+    if metadata.is_dir() {
         return Err(Error::Skip(SkipError::Directory));
+    }
+    if !metadata.is_file() {
+        return Err(Error::Skip(SkipError::NotRegularFile));
     }
     let image = image::Image::open(source_path)?;
     let zoned = image.get_zoned(timezone)?;
@@ -103,7 +112,7 @@ fn get_target_path(
 }
 
 fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
-    if source_path.is_file() {
+    if !fs::metadata(source_path)?.is_dir() {
         return Ok(vec![source_path.to_path_buf()]);
     }
     let read_dir = fs::read_dir(source_path)?;

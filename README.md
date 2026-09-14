@@ -15,6 +15,9 @@ photos taken within the same second. If multiple photos still produce the same
 filename, the batch is rejected before renaming any files. `--dry-run` previews
 the proposed names.
 
+Directories are scanned without recursion. Special files such as named pipes
+and sockets are skipped; errors accessing files are reported.
+
 ## Screenshot
 
 ![Screenshot](assets/screenshot.png)

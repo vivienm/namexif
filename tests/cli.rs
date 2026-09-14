@@ -145,3 +145,182 @@ fn existing_hard_link_is_reported_as_a_conflict() {
     assert_eq!(fs::read(source).unwrap(), bytes);
     assert_eq!(fs::read(target).unwrap(), bytes);
 }
+
+#[test]
+fn exif_offsets_are_converted_to_the_output_timezone() {
+    for (date, offset, timezone, target) in [
+        (DATE, "+02:00", "UTC", "20260601T103456+0000.tiff"),
+        (DATE, "-03:30", "UTC", "20260601T160456+0000.tiff"),
+        (DATE, "+02:00", "Europe/Paris", "20260601T123456+0200.tiff"),
+        (DATE, "+00:00", "Europe/Paris", "20260601T143456+0200.tiff"),
+        (
+            "2026:06:01 00:30:00",
+            "+02:00",
+            "UTC",
+            "20260531T223000+0000.tiff",
+        ),
+        // The offset disambiguates the repeated hour at the end of DST.
+        (
+            "2026:10:25 02:30:00",
+            "+01:00",
+            "Europe/Paris",
+            "20261025T023000+0100.tiff",
+        ),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input.tif");
+        let bytes = image(
+            &source,
+            &[
+                (Tag::DateTimeOriginal, date),
+                (Tag::OffsetTimeOriginal, offset),
+            ],
+        );
+        let output = command()
+            .args(["--timezone", timezone])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(!source.exists());
+        assert_eq!(fs::read(dir.path().join(target)).unwrap(), bytes);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn exif_offset_is_respected_with_the_default_output_timezone() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input.tif");
+    image(
+        &source,
+        &[
+            (Tag::DateTimeOriginal, DATE),
+            (Tag::OffsetTimeOriginal, "+02:00"),
+        ],
+    );
+    // command() supplies TZ=UTC without setting --timezone or NAMEXIF_TIMEZONE.
+    let output = command().arg(&source).output().unwrap();
+    assert_exit(&output, 0);
+    assert!(dir.path().join("20260601T103456+0000.tiff").exists());
+}
+
+#[test]
+fn timezone_environment_variable_selects_the_output_timezone() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input.tif");
+    image(
+        &source,
+        &[
+            (Tag::DateTimeOriginal, DATE),
+            (Tag::OffsetTimeOriginal, "+02:00"),
+        ],
+    );
+    let output = command()
+        .env("NAMEXIF_TIMEZONE", "Asia/Kolkata")
+        .arg(&source)
+        .output()
+        .unwrap();
+    assert_exit(&output, 0);
+    assert!(dir.path().join("20260601T160456+0530.tiff").exists());
+}
+
+#[test]
+fn missing_and_blank_offsets_use_the_requested_timezone() {
+    for offset in [None, Some("   :  "), Some("      ")] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input.tif");
+        let mut tags = vec![(Tag::DateTimeOriginal, DATE)];
+        if let Some(offset) = offset {
+            tags.push((Tag::OffsetTimeOriginal, offset));
+        }
+        image(&source, &tags);
+        let output = command()
+            .args(["--timezone", "Europe/Paris"])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(dir.path().join("20260601T123456+0200.tiff").exists());
+    }
+}
+
+#[test]
+fn fractional_seconds_keep_their_precision_during_timezone_conversion() {
+    for (subsec, fraction) in [
+        (None, ""),
+        (Some("   "), ""),
+        (Some("1"), ".1"),
+        (Some("001"), ".001"),
+        (Some("123456789"), ".123456789"),
+        (Some("1234567899"), ".123456789"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input.tif");
+        let mut tags = vec![
+            (Tag::DateTimeOriginal, DATE),
+            (Tag::OffsetTimeOriginal, "+02:00"),
+        ];
+        if let Some(subsec) = subsec {
+            tags.push((Tag::SubSecTimeOriginal, subsec));
+        }
+        image(&source, &tags);
+        let output = command()
+            .args(["--timezone", "UTC", "--format", "%Y%m%dT%H%M%S%.f%z"])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(
+            dir.path()
+                .join(format!("20260601T103456{fraction}+0000.tiff"))
+                .exists()
+        );
+    }
+}
+
+#[test]
+fn fractional_format_distinguishes_photos_taken_in_the_same_second() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, subsec) in [("a.tif", "123"), ("b.tif", "456")] {
+        image(
+            &dir.path().join(name),
+            &[
+                (Tag::DateTimeOriginal, DATE),
+                (Tag::SubSecTimeOriginal, subsec),
+            ],
+        );
+    }
+    let output = command()
+        .args(["--timezone", "UTC", "--format", "%Y%m%dT%H%M%S.%f%z"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    assert_exit(&output, 0);
+    assert!(dir.path().join("20260601T123456.123+0000.tiff").exists());
+    assert!(dir.path().join("20260601T123456.456+0000.tiff").exists());
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+}
+
+#[test]
+fn malformed_optional_date_tags_are_reported_without_renaming() {
+    for (tag, value) in [
+        (Tag::OffsetTimeOriginal, "oops"),
+        (Tag::OffsetTimeOriginal, "+02:60"),
+        (Tag::OffsetTimeOriginal, "+24:00"),
+        (Tag::OffsetTimeOriginal, "+02:00extra"),
+        (Tag::SubSecTimeOriginal, "oops"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input.tif");
+        let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE), (tag, value)]);
+        let output = command()
+            .args(["--timezone", "UTC"])
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert_exit(&output, 1);
+        assert_eq!(fs::read(source).unwrap(), bytes);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+}

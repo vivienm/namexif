@@ -38,7 +38,7 @@ struct Args {
         default_value = DEFAULT_NAME_FORMAT
     )]
     name_format: String,
-    /// Time zone
+    /// Output time zone; also used to interpret dates without an EXIF offset
     #[arg(
         short = 'z',
         long = "timezone",

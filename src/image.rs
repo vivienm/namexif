@@ -40,43 +40,62 @@ impl Image {
         Ok(Self::new(exif))
     }
 
-    fn get_exif_field(&self, tag: exif::Tag) -> Result<&exif::Field> {
-        self.exif
-            .get_field(tag, exif::In::PRIMARY)
-            .ok_or(Error::Tag(TagError::Missing))
-    }
-
-    fn get_exif_datetime_with(&self, tag: exif::Tag) -> Result<exif::DateTime> {
-        let field = self.get_exif_field(tag)?;
-        match field.value {
-            exif::Value::Ascii(ref ascii) if !ascii.is_empty() => {
-                exif::DateTime::from_ascii(&ascii[0]).map_err(Error::Exif)
-            }
+    fn get_ascii_field(&self, tag: exif::Tag) -> Result<Option<&[u8]>> {
+        let Some(field) = self.exif.get_field(tag, exif::In::PRIMARY) else {
+            return Ok(None);
+        };
+        match &field.value {
+            exif::Value::Ascii(ascii) if ascii.len() == 1 => Ok(Some(&ascii[0])),
             _ => Err(Error::Tag(TagError::Invalid)),
         }
     }
 
-    fn get_civil_datetime_with(&self, tag: exif::Tag) -> Result<civil::DateTime> {
-        let edt = self.get_exif_datetime_with(tag)?;
+    fn get_exif_datetime(&self) -> Result<exif::DateTime> {
+        let data = self
+            .get_ascii_field(exif::Tag::DateTimeOriginal)?
+            .ok_or(Error::Tag(TagError::Missing))?;
+        let mut datetime = exif::DateTime::from_ascii(data)?;
+        if let Some(subsec) = self.get_ascii_field(exif::Tag::SubSecTimeOriginal)? {
+            datetime.parse_subsec(subsec)?;
+        }
+        if let Some(offset) = self.get_ascii_field(exif::Tag::OffsetTimeOriginal)? {
+            // EXIF permits blank offsets to represent an unknown time zone.
+            match datetime.parse_offset(offset) {
+                Err(exif::Error::BlankValue(_)) => {}
+                Err(err) => return Err(err.into()),
+                Ok(()) => {
+                    // The EXIF parser checks syntax but not component ranges.
+                    if offset.len() != 6 || &offset[1..3] > b"23" || &offset[4..6] > b"59" {
+                        return Err(Error::Tag(TagError::Invalid));
+                    }
+                }
+            }
+        }
+        Ok(datetime)
+    }
+
+    pub fn get_zoned(&self, timezone: &tz::TimeZone) -> Result<jiff::Zoned> {
+        let edt = self.get_exif_datetime()?;
         let to_i8 = |v: u8| i8::try_from(v).map_err(|_| Error::OutOfRange);
-        civil::DateTime::new(
+        let datetime = civil::DateTime::new(
             i16::try_from(edt.year).map_err(|_| Error::OutOfRange)?,
             to_i8(edt.month)?,
             to_i8(edt.day)?,
             to_i8(edt.hour)?,
             to_i8(edt.minute)?,
             to_i8(edt.second)?,
-            0,
+            i32::try_from(edt.nanosecond.unwrap_or(0)).map_err(|_| Error::OutOfRange)?,
         )
-        .map_err(|_| Error::OutOfRange)
-    }
+        .map_err(|_| Error::OutOfRange)?;
 
-    pub fn get_civil_datetime(&self) -> Result<civil::DateTime> {
-        self.get_civil_datetime_with(exif::Tag::DateTimeOriginal)
-    }
-
-    pub fn get_zoned(&self, timezone: &tz::TimeZone) -> Result<jiff::Zoned> {
-        let datetime = self.get_civil_datetime()?;
+        if let Some(minutes) = edt.offset {
+            let offset =
+                tz::Offset::from_seconds(i32::from(minutes) * 60).map_err(|_| Error::OutOfRange)?;
+            let timestamp = offset
+                .to_timestamp(datetime)
+                .map_err(|_| Error::OutOfRange)?;
+            return Ok(timestamp.to_zoned(timezone.clone()));
+        }
         datetime
             .to_zoned(timezone.clone())
             .map_err(|_| Error::InvalidLocalDatetime)

@@ -18,6 +18,10 @@ components; formats such as `%D` (which contains slashes) are rejected.
 
 Directories are scanned without recursion. Special files such as named pipes
 and sockets are skipped; errors accessing files are reported.
+If a rename would break a symbolic link found in the scanned directory, the
+entire batch is rejected, including in dry-run mode. Link chains and links with
+unsupported extensions are checked too. Links outside the scanned directory
+are not checked.
 
 ## Screenshot
 

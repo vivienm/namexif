@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error,
     ffi::{OsStr, OsString},
     fmt, fs, io,
@@ -127,17 +128,82 @@ fn get_source_paths(source_path: &Path) -> io::Result<Vec<PathBuf>> {
         .collect()
 }
 
+// Resolve directory aliases while retaining the final entry: canonicalizing
+// the whole path would hide dependencies on intermediate symlinks.
+fn entry_path(path: &Path) -> io::Result<PathBuf> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no filename"))?;
+    Ok(fs::canonicalize(parent)?.join(name))
+}
+
+fn check_symlink_dependencies(renames: &[(PathBuf, Result<PathBuf>)]) -> io::Result<()> {
+    let changing: HashSet<_> = renames
+        .iter()
+        .filter(|(_, target)| target.is_ok())
+        .map(|(source, _)| entry_path(source))
+        .collect::<io::Result<_>>()?;
+    if changing.is_empty() {
+        return Ok(());
+    }
+
+    // Inspect all scanned entries, including unsupported extensions and
+    // already well-named links. Skipping a link does not protect its referent.
+    for (source, _) in renames {
+        let mut path = source.clone();
+        let mut visited = HashSet::new();
+        loop {
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(err)
+                    if matches!(
+                        err.kind(),
+                        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+                    ) =>
+                {
+                    break;
+                }
+                Err(err) => return Err(err),
+            };
+            if metadata.is_dir() || (visited.is_empty() && !metadata.is_symlink()) {
+                break;
+            }
+            let entry = entry_path(&path)?;
+            if !visited.is_empty() && changing.contains(&entry) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "renaming {entry:?} would break symbolic link {source:?}; batch rejected"
+                    ),
+                ));
+            }
+            if !metadata.is_symlink() || !visited.insert(entry) {
+                break;
+            }
+            let target = fs::read_link(&path)?;
+            path = path.parent().unwrap_or(Path::new(".")).join(target);
+        }
+    }
+    Ok(())
+}
+
 pub fn get_renames(
     source_path: &Path,
     timezone: &tz::TimeZone,
     name_format: &str,
 ) -> io::Result<Vec<(PathBuf, Result<PathBuf>)>> {
     let source_paths = get_source_paths(source_path)?;
-    Ok(source_paths
+    let renames = source_paths
         .into_par_iter()
         .map(|source_path| {
             let target_path = get_target_path(&source_path, timezone, name_format);
             (source_path, target_path)
         })
-        .collect())
+        .collect::<Vec<_>>();
+    check_symlink_dependencies(&renames)?;
+    Ok(renames)
 }

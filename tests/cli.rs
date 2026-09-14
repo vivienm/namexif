@@ -420,6 +420,120 @@ fn unambiguous_hours_around_clock_changes_are_preserved() {
 }
 
 #[cfg(unix)]
+mod symlink_dependencies {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn links_to_renamed_photos_reject_the_entire_batch() {
+        for link_name in ["alias.jpg", "alias.txt"] {
+            for absolute in [false, true] {
+                for dry_run in [false, true] {
+                    let dir = tempfile::tempdir().unwrap();
+                    let source = dir.path().join("photo.tif");
+                    let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+                    let other = dir.path().join("other.tif");
+                    let other_bytes =
+                        image(&other, &[(Tag::DateTimeOriginal, "2026:06:02 12:34:56")]);
+                    let link = dir.path().join(link_name);
+                    let referent = if absolute {
+                        source.clone()
+                    } else {
+                        "photo.tif".into()
+                    };
+                    symlink(&referent, &link).unwrap();
+                    let mut cmd = command();
+                    cmd.args(["--timezone", "UTC"]).arg(dir.path());
+                    if dry_run {
+                        cmd.arg("--dry-run");
+                    }
+                    let output = cmd.output().unwrap();
+                    assert_exit(&output, 2);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    assert!(stderr.contains("would break symbolic link"), "{stderr}");
+                    assert_eq!(fs::read(&source).unwrap(), bytes);
+                    assert_eq!(fs::read(&other).unwrap(), other_bytes);
+                    assert_eq!(fs::read_link(&link).unwrap(), referent);
+                    assert_eq!(fs::read(link).unwrap(), bytes);
+                    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 3);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_chain_cannot_lose_an_intermediate_link_even_when_its_final_photo_stays_put() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input");
+        fs::create_dir(&input).unwrap();
+        let source = dir.path().join("photo.tif");
+        let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+        symlink("../photo.tif", input.join("middle.tif")).unwrap();
+        symlink("middle.tif", input.join("alias.txt")).unwrap();
+        let output = command()
+            .args(["--timezone", "UTC"])
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert_exit(&output, 2);
+        assert!(String::from_utf8_lossy(&output.stderr).contains("would break symbolic link"));
+        assert_eq!(fs::read(input.join("alias.txt")).unwrap(), bytes);
+        assert_eq!(
+            fs::read_link(input.join("middle.tif")).unwrap(),
+            Path::new("../photo.tif")
+        );
+        assert_eq!(fs::read_dir(input).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn dependencies_resolve_directory_aliases_and_parent_components() {
+        for referent in ["mirror/photo.tif", "mirror/../input/photo.tif"] {
+            let dir = tempfile::tempdir().unwrap();
+            let input = dir.path().join("input");
+            fs::create_dir(&input).unwrap();
+            let bytes = image(&input.join("photo.tif"), &[(Tag::DateTimeOriginal, DATE)]);
+            symlink(".", input.join("mirror")).unwrap();
+            symlink(referent, input.join("alias.txt")).unwrap();
+            let output = command()
+                .args(["--timezone", "UTC"])
+                .arg(&input)
+                .output()
+                .unwrap();
+            assert_exit(&output, 2);
+            assert!(String::from_utf8_lossy(&output.stderr).contains("would break symbolic link"));
+            assert_eq!(fs::read(input.join("alias.txt")).unwrap(), bytes);
+            assert_eq!(fs::read_dir(input).unwrap().count(), 3);
+        }
+    }
+
+    #[test]
+    fn independent_links_to_an_unchanged_photo_can_still_be_renamed() {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input");
+        fs::create_dir(&input).unwrap();
+        let bytes = image(
+            &dir.path().join("photo.tif"),
+            &[(Tag::DateTimeOriginal, DATE)],
+        );
+        symlink("../photo.tif", input.join("alias.tif")).unwrap();
+        symlink("../photo.tif", input.join("other.txt")).unwrap();
+        let output = command()
+            .args(["--timezone", "UTC"])
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert_exit(&output, 0);
+        assert!(!input.join("alias.tif").exists());
+        assert_eq!(
+            fs::read_link(input.join(TARGET)).unwrap(),
+            Path::new("../photo.tif")
+        );
+        assert_eq!(fs::read(input.join(TARGET)).unwrap(), bytes);
+        assert_eq!(fs::read(input.join("other.txt")).unwrap(), bytes);
+    }
+}
+
+#[cfg(unix)]
 mod special_files {
     use super::*;
     use std::{

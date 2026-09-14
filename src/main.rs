@@ -87,7 +87,7 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
     let renames = rename::get_renames(&args.source_path, &timezone, &args.name_format)?;
 
     // Filter classified errors out before handing the plan to nominal: skips
-    // are info, image / no-parent errors are real failures we count.
+    // are info, derivation errors are real failures we count.
     let mut errors = 0;
     let pairs = renames
         .into_iter()
@@ -96,7 +96,7 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
                 tracing::info!("Skipping file {}: {}", source_path.display(), err);
                 None
             }
-            Err(err @ (rename::Error::Image(_) | rename::Error::NoParent)) => {
+            Err(err) => {
                 tracing::error!("Skipping file {}: {}", source_path.display(), err);
                 errors += 1;
                 None

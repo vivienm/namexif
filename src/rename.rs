@@ -34,6 +34,8 @@ impl error::Error for SkipError {}
 #[derive(Debug, Display, From)]
 pub enum Error {
     Image(image::Error),
+    #[display("Invalid filename format: {_0}")]
+    Format(jiff::Error),
     Skip(SkipError),
     #[display("Source path has no parent directory")]
     NoParent,
@@ -70,8 +72,7 @@ fn get_target_file_stem(
     }
     let image = image::Image::open(source_path)?;
     let zoned = image.get_zoned(timezone)?;
-    let file_stem = zoned.strftime(name_format).to_string();
-    Ok(file_stem)
+    jiff::fmt::strtime::format(name_format, &zoned).map_err(Error::Format)
 }
 
 fn get_target_name(

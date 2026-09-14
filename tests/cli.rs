@@ -34,12 +34,12 @@ fn image(path: &Path, tags: &[(Tag, &str)]) -> Vec<u8> {
 fn command() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_namexif"));
     command
-        .env_remove("NAMEXIF_FORMAT")
+        .env("NAMEXIF_FORMAT", FORMAT)
         .env_remove("NAMEXIF_TIMEZONE")
         .env_remove("NAMEXIF_LOG_LEVEL")
         .env("TZ", "UTC")
         .env("LS_COLORS", "")
-        .args(["--assume-yes", "--format", FORMAT]);
+        .arg("--assume-yes");
     command
 }
 
@@ -66,6 +66,30 @@ fn renames_a_photo_and_preserves_its_contents() {
     assert_exit(&output, 0);
     assert!(!source.exists());
     assert_eq!(fs::read(dir.path().join(TARGET)).unwrap(), bytes);
+}
+
+#[test]
+fn invalid_formats_report_errors_without_panicking_or_renaming() {
+    for format in ["%", "%J"] {
+        for dry_run in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let source = dir.path().join("input.tif");
+            let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+            let mut cmd = command();
+            cmd.args(["--timezone", "UTC", "--format", format])
+                .arg(&source);
+            if dry_run {
+                cmd.arg("--dry-run");
+            }
+            let output = cmd.output().unwrap();
+            assert_exit(&output, 1);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(stderr.contains("Invalid filename format"), "{stderr}");
+            assert!(!stderr.contains("panicked"), "{stderr}");
+            assert_eq!(fs::read(source).unwrap(), bytes);
+            assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+        }
+    }
 }
 
 #[cfg(unix)]

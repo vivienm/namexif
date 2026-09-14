@@ -92,6 +92,41 @@ fn invalid_formats_report_errors_without_panicking_or_renaming() {
     }
 }
 
+#[test]
+fn filename_formats_cannot_create_directories_or_escape_the_source_directory() {
+    for dry_run in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input");
+        fs::create_dir(&input).unwrap();
+        let source = input.join("photo.tif");
+        let bytes = image(&source, &[(Tag::DateTimeOriginal, DATE)]);
+        let absolute = dir.path().join("escaped").to_str().unwrap().to_owned();
+        let formats = ["%D", "%Y/%m", "../escaped", "./same", "%Y/", &absolute];
+        #[cfg(windows)]
+        let formats = formats
+            .into_iter()
+            .chain([r"..\escaped", r"C:escaped", r"\escaped"]);
+        for format in formats {
+            let mut cmd = command();
+            cmd.args(["--timezone", "UTC", "--format", format])
+                .arg(&input);
+            if dry_run {
+                cmd.arg("--dry-run");
+            }
+            let output = cmd.output().unwrap();
+            assert_exit(&output, 1);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains("result must be a single filename"),
+                "{stderr}"
+            );
+            assert_eq!(fs::read(&source).unwrap(), bytes);
+            assert_eq!(fs::read_dir(&input).unwrap().count(), 1);
+            assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+        }
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn source_symlink_cannot_replace_the_photo_it_points_to() {

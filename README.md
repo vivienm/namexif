@@ -13,7 +13,8 @@ determines the instant even during these transitions.
 Use `--format '%Y%m%dT%H%M%S%.f%z'` to include fractional seconds and distinguish
 photos taken within the same second. If multiple photos still produce the same
 filename, the batch is rejected before renaming any files. `--dry-run` previews
-the proposed names.
+the proposed names. The format must produce a filename, without directory
+components; formats such as `%D` (which contains slashes) are rejected.
 
 Directories are scanned without recursion. Special files such as named pipes
 and sockets are skipped; errors accessing files are reported.

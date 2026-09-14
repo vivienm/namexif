@@ -2,7 +2,7 @@ use std::{
     error,
     ffi::{OsStr, OsString},
     fmt, fs, io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     result,
 };
 
@@ -39,6 +39,8 @@ pub enum Error {
     Image(image::Error),
     #[display("Invalid filename format: {_0}")]
     Format(jiff::Error),
+    #[display("Invalid filename format: result must be a single filename")]
+    InvalidFilename,
     Skip(SkipError),
     #[display("Source path has no parent directory")]
     NoParent,
@@ -94,6 +96,10 @@ fn get_target_name(
     let mut target_name = target_file_stem;
     target_name.push('.');
     target_name.push_str(target_extension);
+    let mut components = Path::new(&target_name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return Err(Error::InvalidFilename);
+    }
     Ok(OsString::from(target_name))
 }
 

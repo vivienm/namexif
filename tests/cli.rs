@@ -900,3 +900,59 @@ mod special_files {
         assert_eq!(fs::read(dir.path().join(TARGET)).unwrap(), bytes);
     }
 }
+
+#[test]
+fn preparation_reports_all_conflicts_and_keeps_even_independent_photos_unchanged() {
+    for dry_run in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let files = [
+            ("first.tif", DATE),
+            ("second.tif", DATE),
+            ("blocked.tif", "2026:06:01 12:34:57"),
+            ("20260601T123457+0000.tiff", "2026:06:01 12:34:57"),
+            ("independent.tif", "2026:06:01 12:34:58"),
+        ];
+        let originals: Vec<_> = files
+            .into_iter()
+            .map(|(name, date)| {
+                let path = dir.path().join(name);
+                let bytes = image(&path, &[(Tag::DateTimeOriginal, date)]);
+                (path, bytes)
+            })
+            .collect();
+        let mut cmd = command();
+        cmd.args(["--timezone", "UTC", "--log-level", "error"])
+            .arg(dir.path());
+        if dry_run {
+            cmd.arg("--dry-run");
+        }
+        let output = cmd.output().unwrap();
+        assert_exit(&output, 2);
+        assert!(output.stdout.is_empty());
+        let errors = String::from_utf8_lossy(&output.stderr);
+        assert!(errors.contains("3 rename operations rejected"), "{errors}");
+        assert_eq!(
+            errors
+                .lines()
+                .filter(|line| line.contains("Failed to prepare rename"))
+                .count(),
+            3
+        );
+        assert!(
+            errors.lines().all(|line| line.contains("ERROR")),
+            "{errors}"
+        );
+        for name in ["first.tif", "second.tif", "blocked.tif"] {
+            assert!(errors.contains(name), "{errors}");
+        }
+        assert!(
+            errors.contains("multiple sources map to target"),
+            "{errors}"
+        );
+        assert!(errors.contains("already exists"), "{errors}");
+        for (path, bytes) in originals {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 5);
+    }
+}

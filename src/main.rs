@@ -66,17 +66,14 @@ fn pluralize(value: usize) -> &'static str {
 #[derive(Debug, From, Error)]
 enum Error {
     Io(io::Error),
-    Plan(nominal::PlanError),
-    #[error(ignore)]
-    Conflicts(usize),
+    Preparation(nominal::PreparationError),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Error::Io(err) => err.fmt(f),
-            Error::Plan(err) => err.fmt(f),
-            Error::Conflicts(n) => write!(f, "{} conflicting file{}", n, pluralize(*n)),
+            Error::Preparation(err) => err.fmt(f),
         }
     }
 }
@@ -105,17 +102,8 @@ fn try_run(args: &Args) -> Result<(usize, usize)> {
             Ok(target_path) => Some((source_path, target_path)),
         });
 
-    let mut plan = nominal::Renamer::from_iter(pairs).plan()?;
-
-    // Surface targets that already exist on disk outside the batch. They are
-    // drained from the plan, so apply only sees safe renames.
-    let conflicts = plan.check_fs()?;
-    for conflict in &conflicts {
-        tracing::error!("{}", conflict);
-    }
-    if !conflicts.is_empty() {
-        return Err(Error::Conflicts(conflicts.len()));
-    }
+    // Strict conversion reports every rejection before any rename is applied.
+    let plan = nominal::Renamer::from_iter(pairs).prepare().into_plan()?;
 
     if plan.is_empty() {
         return Ok((0, errors));
@@ -192,6 +180,18 @@ fn main() -> anyhow::Result<()> {
             process::exit(1);
         }
         Err(err) => {
+            if let Error::Preparation(preparation) = &err {
+                for rejection in &preparation.rejections {
+                    for rename in &rejection.renames {
+                        tracing::error!(
+                            "Failed to prepare rename {:?} -> {:?}: {}",
+                            rename.source,
+                            rename.target,
+                            rejection.reason,
+                        );
+                    }
+                }
+            }
             tracing::error!("{}", err);
             process::exit(2);
         }

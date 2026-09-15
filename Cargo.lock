@@ -521,17 +521,19 @@ dependencies = [
 
 [[package]]
 name = "nominal"
-version = "0.1.0"
-source = "git+https://github.com/vivienm/rust-nominal#6c6d1a44e7251d3ea07590981f6d3e2e410aee15"
+version = "0.2.0"
+source = "git+https://github.com/vivienm/rust-nominal#c3441dac929f8a2fc3fedc533a23714aec6f459b"
 dependencies = [
  "dialoguer",
  "icu_collator",
  "icu_provider",
  "lscolors",
  "nu-ansi-term",
+ "rustix",
  "tempfile",
  "thiserror",
  "tracing",
+ "windows-sys",
 ]
 
 [[package]]

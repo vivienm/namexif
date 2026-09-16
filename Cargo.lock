@@ -522,7 +522,7 @@ dependencies = [
 [[package]]
 name = "nominal"
 version = "0.2.0"
-source = "git+https://github.com/vivienm/rust-nominal#c3441dac929f8a2fc3fedc533a23714aec6f459b"
+source = "git+https://github.com/vivienm/rust-nominal#bdb861303b30e0e384582b72dcc27bd40f4e1e1c"
 dependencies = [
  "dialoguer",
  "icu_collator",
